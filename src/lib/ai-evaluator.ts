@@ -366,8 +366,19 @@ export async function evaluateSupervisi(penugasanId: string): Promise<{
     detail: `Supervisi "${penugasan.instrumen.judul}" dievaluasi dengan skor ${finalEvaluation.skor_total} (${finalEvaluation.predikat})`,
   });
 
-  // Jalankan pipeline podcast Fish Audio
-  await generatePodcastAudio(updatedHasil.id);
+  // Jalankan pipeline podcast Fish Audio di latar belakang (asynchronous) agar respons submit cepat dan tidak membuat UI guru stuck
+  generatePodcastAudio(updatedHasil.id).catch(async (err) => {
+    console.error("Gagal generate podcast di background:", err);
+    await prisma.podcast
+      .update({
+        where: { hasilId: updatedHasil.id },
+        data: {
+          status: "gagal",
+          errorMessage: err instanceof Error ? err.message : String(err),
+        },
+      })
+      .catch(() => {});
+  });
 
   // Kirim notifikasi ke Bot Shiroko bila integrasi aktif (PRD Bagian 7.5 & 10)
   if (settings.shiroko_enabled === "true" && settings.shiroko_url) {
@@ -490,6 +501,7 @@ export async function generatePodcastAudio(hasilId: string): Promise<{
     for (const paragraph of paragraphs) {
       const res = await fetch("https://api.fish.audio/v1/tts", {
         method: "POST",
+        signal: AbortSignal.timeout(15000),
         headers: {
           Authorization: `Bearer ${fishKey}`,
           "Content-Type": "application/json",

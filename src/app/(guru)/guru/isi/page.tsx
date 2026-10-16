@@ -104,14 +104,25 @@ export default function GuruIsiListPage() {
               <p className="text-xs text-slate-500">{p.instrumen.deskripsi}</p>
             </div>
 
-            <Link
-              href={`/guru/isi/${p.id}`}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-sora-500 to-sakura-500 text-white text-xs font-bold shadow-md hover:opacity-95 shrink-0"
-            >
-              <ClipboardEdit className="w-4 h-4" />
-              {isDone ? "Isi / Evaluasi Ulang" : "Buka Form Bertahap"}
-              <ArrowRight className="w-4 h-4" />
-            </Link>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {isDone && (
+                <Link
+                  href={`/guru/hasil/${p.id}`}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-600 text-white text-xs font-bold shadow-md hover:bg-emerald-700 transition shrink-0"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Lihat Hasil AI
+                </Link>
+              )}
+              <Link
+                href={`/guru/isi/${p.id}`}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-sora-500 to-sakura-500 text-white text-xs font-bold shadow-md hover:opacity-95 shrink-0"
+              >
+                <ClipboardEdit className="w-4 h-4" />
+                {isDone ? "Buka Lembar Jawaban" : "Buka Form Bertahap"}
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
           </div>
         );
       })}

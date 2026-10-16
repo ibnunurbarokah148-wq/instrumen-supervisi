@@ -47,6 +47,12 @@ export default function GuruIsiFormPage() {
       if (res.ok) {
         const data = await res.json();
         const p = data.penugasan;
+        // Jika supervisi sudah berstatus selesai, langsung arahkan ke halaman hasil
+        if (p.status === "selesai") {
+          router.replace(`/guru/hasil/${penugasanId}`);
+          return;
+        }
+
         setJudul(p.instrumen.judul);
         setDeskripsi(p.instrumen.deskripsi);
         setQuestions(p.instrumen.pertanyaan || []);
@@ -63,7 +69,7 @@ export default function GuruIsiFormPage() {
       }
       setLoading(false);
     })();
-  }, [penugasanId]);
+  }, [penugasanId, router]);
 
   // Kelompokkan pertanyaan per aspek (PRD Bagian 6.2: satu aspek per langkah)
   const aspectGroups = React.useMemo(() => {
@@ -138,6 +144,26 @@ export default function GuruIsiFormPage() {
     }
   };
 
+  // Fallback Polling jika submit sedang berjalan agar jika koneksi browser terputus tetap otomatis redirect saat selesai
+  useEffect(() => {
+    if (!submitting) return;
+    const interval = setInterval(async () => {
+      try {
+        const checkRes = await fetch(`/api/guru/penugasan/${penugasanId}`);
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          if (checkData.penugasan?.status === "selesai") {
+            clearInterval(interval);
+            router.push(`/guru/hasil/${penugasanId}`);
+          }
+        }
+      } catch {
+        // ignore network hiccup during polling
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [submitting, penugasanId, router]);
+
   const handleFinalSubmit = async () => {
     setErrorMsg("");
     setSubmitting(true);
@@ -158,7 +184,20 @@ export default function GuruIsiFormPage() {
       }
       router.push(`/guru/hasil/${penugasanId}`);
     } catch {
-      setErrorMsg("Gagal menghubungi server.");
+      // Periksa apakah di database evaluasi sebenarnya sudah berhasil disimpan
+      try {
+        const checkRes = await fetch(`/api/guru/penugasan/${penugasanId}`);
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          if (checkData.penugasan?.status === "selesai") {
+            router.push(`/guru/hasil/${penugasanId}`);
+            return;
+          }
+        }
+      } catch {
+        // ignore
+      }
+      setErrorMsg("Koneksi ke server terputus. Silakan muat ulang halaman untuk melihat status terbaru.");
       setSubmitting(false);
     }
   };
