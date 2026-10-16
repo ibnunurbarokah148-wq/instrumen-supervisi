@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String         @id @default(cuid())
+  nama         String
+  email        String         @unique
+  nip          String?
+  passwordHash String
+  role         String         @default("guru") // "admin" | "guru"
+  nomorWA      String?
+  mapel        String?
+  fotoUrl      String?
+  aktif        Boolean        @default(true)
+  lastLoginAt  DateTime?
+  badgesJSON   String         @default("[]")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  penugasan    Penugasan[]
+  logs         LogAktivitas[]
+}
+
+model Instrumen {
+  id          String       @id @default(cuid())
+  judul       String
+  deskripsi   String
+  versi       Int          @default(1)
+  parentId    String?
+  status      String       @default("aktif") // "aktif" | "draft" | "arsip"
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  pertanyaan  Pertanyaan[]
+  penugasan   Penugasan[]
+}
+
+model Pertanyaan {
+  id          String    @id @default(cuid())
+  instrumenId String
+  teks        String
+  tipe        String    @default("skala") // "skala" | "pilihan_ganda" | "ya_tidak" | "isian_singkat" | "esai"
+  aspek       String    @default("Perencanaan") // "Perencanaan" | "Pelaksanaan" | "Evaluasi" | "Penguasaan IT"
+  bobot       Float     @default(1.0)
+  urutan      Int       @default(1)
+  wajib       Boolean   @default(true)
+  opsiJSON    String    @default("[]")
+
+  instrumen   Instrumen @relation(fields: [instrumenId], references: [id], onDelete: Cascade)
+  jawaban     Jawaban[]
+}
+
+model Penugasan {
+  id          String    @id @default(cuid())
+  instrumenId String
+  guruId      String
+  tenggat     DateTime
+  status      String    @default("belum") // "belum" | "draft" | "selesai"
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  instrumen   Instrumen @relation(fields: [instrumenId], references: [id], onDelete: Cascade)
+  guru        User      @relation(fields: [guruId], references: [id], onDelete: Cascade)
+  jawaban     Jawaban[]
+  hasil       Hasil?
+}
+
+model Jawaban {
+  id           String    @id @default(cuid())
+  penugasanId  String
+  pertanyaanId String
+  nilaiJSON    String
+  updatedAt    DateTime  @updatedAt
+
+  penugasan    Penugasan  @relation(fields: [penugasanId], references: [id], onDelete: Cascade)
+  pertanyaan   Pertanyaan @relation(fields: [pertanyaanId], references: [id], onDelete: Cascade)
+
+  @@unique([penugasanId, pertanyaanId])
+}
+
+model Hasil {
+  id               String    @id @default(cuid())
+  penugasanId      String    @unique
+  skorPerAspekJSON String    @default("[]") // [{"aspek": "", "skor": 0, "alasan": ""}]
+  skorTotal        Float     @default(0)
+  skorAsliAI       Float?
+  predikat         String    @default("-")
+  kesimpulan       String    @default("")
+  kekuatanJSON     String    @default("[]")
+  sarannyaJSON     String    @default("[]")
+  catatanAdmin     String?
+  diubahAdminOleh  String?
+  diubahAdminPada  DateTime?
+  status           String    @default("memproses") // "memproses" | "selesai" | "gagal"
+  errorMessage     String?
+  tokenUsage       Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  penugasan        Penugasan @relation(fields: [penugasanId], references: [id], onDelete: Cascade)
+  podcast          Podcast?
+}
+
+model Podcast {
+  id                  String   @id @default(cuid())
+  hasilId             String   @unique
+  naskah              String
+  transkripSegmenJSON String   @default("[]") // [{"start":0,"end":6,"speaker":"Sensei-AI","text":"..."}]
+  audioPath           String?
+  cacheHash           String?
+  status              String   @default("menunggu") // "menunggu" | "memproses" | "selesai" | "gagal"
+  durasi              Int      @default(0)
+  karakterTts         Int      @default(0)
+  errorMessage        String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  hasil               Hasil    @relation(fields: [hasilId], references: [id], onDelete: Cascade)
+}
+
+model Pengaturan {
+  key       String   @id
+  value     String
+  isSecret  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+model LogAktivitas {
+  id       String   @id @default(cuid())
+  userId   String?
+  namaUser String?
+  role     String?
+  aksi     String
+  detail   String
+  waktu    DateTime @default(now())
+
+  user     User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
