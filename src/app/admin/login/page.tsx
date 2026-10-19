@@ -10,13 +10,12 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  Terminal,
 } from "lucide-react";
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [identifier, setIdentifier] = useState("admin@sekolah.sch.id");
-  const [password, setPassword] = useState("admin123");
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -130,24 +129,6 @@ export default function AdminLoginPage() {
               <Lock className="w-4 h-4" />
               {loading ? "Mengautentikasi..." : "Masuk ke Control Room Admin"}
             </button>
-
-            <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-              <span className="flex items-center gap-1.5">
-                <Terminal className="w-3.5 h-3.5 text-sora-400" />
-                Default Seed:
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setIdentifier("admin@sekolah.sch.id");
-                  setPassword("admin123");
-                  setError("");
-                }}
-                className="text-sora-300 hover:underline font-mono text-[11px]"
-              >
-                admin@sekolah.sch.id / admin123
-              </button>
-            </div>
           </form>
         </div>
 

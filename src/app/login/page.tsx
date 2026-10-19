@@ -8,7 +8,6 @@ import {
   GraduationCap,
   LogIn,
   UserPlus,
-  Sparkles,
   Eye,
   EyeOff,
   CheckCircle2,
@@ -18,8 +17,8 @@ import {
 export default function GuruLoginPage() {
   const router = useRouter();
   const [tab, setTab] = useState<"login" | "register">("login");
-  const [identifier, setIdentifier] = useState("aulia@sekolah.sch.id");
-  const [password, setPassword] = useState("guru123");
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -97,12 +96,6 @@ export default function GuruLoginPage() {
       setError("Gagal menghubungi server.");
       setLoading(false);
     }
-  };
-
-  const fillDemoGuru = (email: string) => {
-    setIdentifier(email);
-    setPassword("guru123");
-    setError("");
   };
 
   return (
@@ -227,35 +220,6 @@ export default function GuruLoginPage() {
               >
                 {loading ? "Sedang Memeriksa Sesi..." : "Masuk ke Dashboard Guru ✨"}
               </button>
-
-              {/* Pilihan Akun Demo Guru Cepat */}
-              <div className="pt-4 border-t border-slate-100">
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-sakura-500" />
-                  Klik Akun Guru Contoh (Password: guru123)
-                </p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    { nama: "Aulia (Informatika)", email: "aulia@sekolah.sch.id" },
-                    { nama: "Rizky (Matematika)", email: "rizky@sekolah.sch.id" },
-                    { nama: "Nadia (Bhs Jepang)", email: "nadia@sekolah.sch.id" },
-                    { nama: "Bagas (Fisika)", email: "bagas@sekolah.sch.id" },
-                  ].map((g) => (
-                    <button
-                      key={g.email}
-                      type="button"
-                      onClick={() => fillDemoGuru(g.email)}
-                      className={`px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border text-left truncate transition ${
-                        identifier === g.email
-                          ? "bg-sora-50 border-sora-300 text-sora-800"
-                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                      }`}
-                    >
-                      {g.nama}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </form>
           ) : (
             <form onSubmit={handleRegister} className="space-y-3.5">

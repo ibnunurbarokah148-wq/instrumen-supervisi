@@ -109,9 +109,6 @@ export default async function HomePage() {
                 Masuk ke Portal Guru
                 <ArrowRight className="w-4 h-4" />
               </Link>
-              <p className="text-[11px] text-center text-slate-400 mt-2">
-                Akun Demo Guru: <code className="text-slate-600 font-semibold">aulia@sekolah.sch.id</code> / <code className="text-slate-600 font-semibold">guru123</code>
-              </p>
             </div>
           </div>
 
@@ -152,9 +149,6 @@ export default async function HomePage() {
                 Masuk ke Control Room Admin
                 <ArrowRight className="w-4 h-4" />
               </Link>
-              <p className="text-[11px] text-center text-slate-400 mt-2">
-                Akun Demo Admin: <code className="text-sora-300 font-semibold">admin@sekolah.sch.id</code> / <code className="text-sora-300 font-semibold">admin123</code>
-              </p>
             </div>
           </div>
         </div>
