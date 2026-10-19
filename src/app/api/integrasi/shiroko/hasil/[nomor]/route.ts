@@ -22,11 +22,19 @@ export async function GET(
 
     const { nomor } = await context.params;
     const cleanNomor = nomor.replace(/[^0-9]/g, "");
+    const coreNumber = cleanNomor.startsWith("62")
+      ? cleanNomor.slice(2)
+      : cleanNomor.startsWith("0")
+      ? cleanNomor.slice(1)
+      : cleanNomor;
 
     const guru = await prisma.user.findFirst({
       where: {
         role: "guru",
-        nomorWA: { contains: cleanNomor },
+        OR: [
+          { nomorWA: { contains: cleanNomor } },
+          { nomorWA: { contains: coreNumber } },
+        ],
       },
       include: {
         penugasan: {

@@ -149,11 +149,16 @@ export async function POST(req: NextRequest) {
       }
 
       if (kirimNotifikasiWA) {
+        const assignedGurus = await prisma.user.findMany({
+          where: { id: { in: guruIds }, role: "guru" },
+          select: { id: true, nama: true, nomorWA: true },
+        });
         triggerShirokoWebhook({
           event: "penugasan_supervisi_baru",
           instrumen: instrumen.judul,
           tenggat: tenggatStr,
           jumlahGuru: assignedCount,
+          gurus: assignedGurus,
         }).catch(() => {});
       }
 

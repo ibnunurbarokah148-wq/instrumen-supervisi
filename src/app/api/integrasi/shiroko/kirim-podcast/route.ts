@@ -41,8 +41,19 @@ export async function POST(req: NextRequest) {
       });
     } else if (nomorWA) {
       const cleanNomor = String(nomorWA).replace(/[^0-9]/g, "");
+      const coreNumber = cleanNomor.startsWith("62")
+        ? cleanNomor.slice(2)
+        : cleanNomor.startsWith("0")
+        ? cleanNomor.slice(1)
+        : cleanNomor;
       const guru = await prisma.user.findFirst({
-        where: { role: "guru", nomorWA: { contains: cleanNomor } },
+        where: {
+          role: "guru",
+          OR: [
+            { nomorWA: { contains: cleanNomor } },
+            { nomorWA: { contains: coreNumber } },
+          ],
+        },
       });
       if (guru) {
         const lastPenugasan = await prisma.penugasan.findFirst({
