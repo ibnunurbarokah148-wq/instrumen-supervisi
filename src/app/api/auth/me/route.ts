@@ -16,11 +16,12 @@ export async function GET() {
       email: true,
       nip: true,
       role: true,
+      jabatan: true,
+      unitKerja: true,
       nomorWA: true,
       mapel: true,
       fotoUrl: true,
       aktif: true,
-      badgesJSON: true,
       lastLoginAt: true,
     },
   });

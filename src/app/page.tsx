@@ -1,41 +1,43 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getSession, isSupervisorRole } from "@/lib/auth";
 import { SenseiMascot } from "@/components/SenseiMascot";
 import {
   ShieldCheck,
   GraduationCap,
   Sparkles,
-  Headphones,
-  FileSpreadsheet,
+  MessageSquareText,
+  FileCheck2,
+  Eye,
   ArrowRight,
+  Lock,
 } from "lucide-react";
 
 export default async function HomePage() {
   const session = await getSession();
   if (session) {
-    redirect(session.role === "admin" ? "/admin" : "/guru");
+    redirect(isSupervisorRole(session.role) ? "/admin" : "/guru");
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sora-50 via-white to-sakura-50 flex flex-col justify-between p-6 sm:p-10">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-emerald-50/30 flex flex-col justify-between p-6 sm:p-10">
       {/* Header */}
-      <header className="max-w-5xl w-full mx-auto flex items-center justify-between">
+      <header className="max-w-6xl w-full mx-auto flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <SenseiMascot size="sm" mood="happy" />
           <div>
-            <span className="text-xs font-extrabold uppercase tracking-wider text-sakura-600 block">
-              Instrumen Supervisi Pendidikan v2.0
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-700 block">
+              Permendikbudristek No. 16 Tahun 2022
             </span>
             <h1 className="font-display font-bold text-lg text-slate-900">
-              Sensei-AI • Web Agent Supervisor
+              SIPENA • Supervisi & Evaluasi Akademik
             </h1>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Link
             href="/login"
-            className="px-4 py-2 rounded-xl text-sm font-bold text-sora-700 hover:bg-sora-100/70 transition"
+            className="px-4 py-2 rounded-xl text-sm font-bold text-blue-700 hover:bg-blue-100/70 transition"
           >
             Masuk Guru
           </Link>
@@ -43,68 +45,112 @@ export default async function HomePage() {
             href="/admin/login"
             className="px-4 py-2 rounded-xl text-sm font-bold bg-slate-900 text-white hover:bg-slate-800 transition"
           >
-            Panel Admin
+            Portal Pimpinan & Admin
           </Link>
         </div>
       </header>
 
-      {/* Hero & Pemisahan Portal */}
-      <main className="max-w-5xl w-full mx-auto my-10">
-        <div className="text-center max-w-2xl mx-auto mb-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-sora-200 shadow-sm text-xs font-bold text-sora-700 mb-4">
-            <Sparkles className="w-3.5 h-3.5 text-sakura-500" />
-            Evaluasi AI Terstruktur • Podcast Fish Audio TTS • Export PDF & Word
+      {/* Hero & Arsitektur 4 Peran */}
+      <main className="max-w-6xl w-full mx-auto my-8">
+        <div className="text-center max-w-3xl mx-auto mb-10">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-blue-200 shadow-xs text-xs font-bold text-blue-800 mb-4">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+            Alur 4 Peran Resmi • AI Co-Evaluator • Berita Acara 3 Pihak • Bot WhatsApp
           </div>
           <div className="flex justify-center mb-4">
-            <SenseiMascot size="xl" mood="cheer" />
+            <SenseiMascot size="lg" mood="cheer" />
           </div>
           <h2 className="font-display font-extrabold text-3xl sm:text-4xl text-slate-900 tracking-tight">
-            Supervisi Akademik Lebih Hangat Bersama{" "}
-            <span className="bg-gradient-to-r from-sora-600 to-sakura-500 bg-clip-text text-transparent">
-              Sensei-AI
+            Supervisi Akademik Terstandar, Objektif, dan Terintegrasi{" "}
+            <span className="bg-gradient-to-r from-blue-700 to-emerald-600 bg-clip-text text-transparent">
+              Asisten AI & WhatsApp
             </span>
           </h2>
           <p className="text-slate-600 mt-3 text-base leading-relaxed">
-            Pilih portal akses sesuai peran Anda. Sistem ini memisahkan secara
-            penuh area kerja <strong>Guru</strong> dan ruang kendali{" "}
-            <strong>Administrator</strong> demi keamanan serta kenyamanan evaluasi.
+            Mengelola siklus lengkap supervisi pendidikan: Pengajuan Perangkat
+            Ajar & Evaluasi Diri Guru, Verifikasi & Penilaian Observasi Kepala
+            Sekolah berbantuan AI, Pengesahan Permanen (Immutable), Rencana
+            Tindak Lanjut (RTL) Pengawas Sekolah, hingga penarikan hasil via
+            Bot WhatsApp.
           </p>
+        </div>
+
+        {/* 4 Tahap Ekosistem */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center mb-3">
+              <GraduationCap className="w-5 h-5" />
+            </div>
+            <h3 className="font-bold text-sm text-slate-900">
+              1. Guru (Evaluasi Diri)
+            </h3>
+            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+              Mengunggah 6 berkas perangkat pembelajaran & mengisi rubrik 1–4
+              disertai bukti keterlaksanaan kelas.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-3">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <h3 className="font-bold text-sm text-slate-900">
+              2. Kepala Sekolah + AI
+            </h3>
+            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+              Memverifikasi perangkat, menilai observasi dengan draf AI
+              Co-Evaluator, lalu mengesahkan & mengunci laporan.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center mb-3">
+              <Eye className="w-5 h-5" />
+            </div>
+            <h3 className="font-bold text-sm text-slate-900">
+              3. Pengawas Pembina
+            </h3>
+            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+              Meninjau laporan disahkan, menetapkan Rencana Tindak Lanjut (RTL)
+              & memantau target mutu.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center mb-3">
+              <MessageSquareText className="w-5 h-5" />
+            </div>
+            <h3 className="font-bold text-sm text-slate-900">
+              4. Bot WhatsApp & PDF
+            </h3>
+            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+              Guru & pimpinan dapat menarik nilai, temuan, RTL, dan Berita Acara
+              PDF 3 tanda tangan langsung via WA.
+            </p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Kartu Portal Guru */}
-          <div className="rounded-3xl bg-white/90 backdrop-blur border-2 border-sora-200 p-7 shadow-pastel flex flex-col justify-between hover:border-sora-400 transition">
+          <div className="rounded-3xl bg-white border-2 border-blue-200 p-7 shadow-sm flex flex-col justify-between hover:border-blue-400 transition">
             <div>
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sora-400 to-sora-600 text-white flex items-center justify-center shadow-md mb-4">
-                <GraduationCap className="w-6 h-6" />
+              <div className="flex items-center justify-between mb-4">
+                <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold">
+                  Portal Pendidik (/login)
+                </span>
+                <FileCheck2 className="w-6 h-6 text-blue-600" />
               </div>
-              <span className="px-2.5 py-1 rounded-full bg-sora-100 text-sora-700 text-xs font-bold">
-                Portal Guru (/guru)
-              </span>
-              <h3 className="font-display font-bold text-2xl text-slate-900 mt-3">
-                Dashboard Guru & Refleksi Diri
+              <h3 className="font-display font-bold text-2xl text-slate-900">
+                Portal Guru & Perangkat Ajar
               </h3>
               <p className="text-sm text-slate-600 mt-2 leading-relaxed">
-                Isi instrumen supervisi bertahap dengan simpan draft otomatis,
-                dapatkan evaluasi & saran dari Sensei-AI, dengarkan podcast
-                suara reflektif, dan unduh laporan PDF/Word milik Anda.
+                Lengkapi 6 komponen Modul Ajar, isi instrumen berbasis rubrik
+                1–4, pantau progres verifikasi Kepala Sekolah & RTL Pengawas,
+                serta tarik PDF hasil via Bot WhatsApp.
               </p>
-              <ul className="mt-4 space-y-2 text-xs text-slate-600 font-medium">
-                <li className="flex items-center gap-2">
-                  <Headphones className="w-4 h-4 text-sakura-500" />
-                  Pemutar Podcast Fish Audio dengan transkrip tersorot otomatis
-                </li>
-                <li className="flex items-center gap-2">
-                  <FileSpreadsheet className="w-4 h-4 text-sora-500" />
-                  Grafik radar capaian per aspek & riwayat lintas periode
-                </li>
-              </ul>
             </div>
 
             <div className="mt-6 pt-4 border-t border-slate-100">
               <Link
                 href="/login"
-                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-gradient-to-r from-sora-500 to-sakura-500 text-white font-bold text-sm shadow-md hover:opacity-95 transition"
+                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-sm shadow-sm transition"
               >
                 Masuk ke Portal Guru
                 <ArrowRight className="w-4 h-4" />
@@ -112,41 +158,31 @@ export default async function HomePage() {
             </div>
           </div>
 
-          {/* Kartu Portal Admin */}
-          <div className="rounded-3xl bg-slate-900 text-white border-2 border-slate-800 p-7 shadow-xl flex flex-col justify-between hover:border-sora-500/60 transition">
+          {/* Kartu Portal Kepala Sekolah, Pengawas & Admin */}
+          <div className="rounded-3xl bg-slate-900 text-white border-2 border-slate-800 p-7 shadow-xl flex flex-col justify-between hover:border-blue-500/60 transition">
             <div>
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sakura-500 to-sora-500 text-white flex items-center justify-center shadow-md mb-4">
-                <ShieldCheck className="w-6 h-6" />
+              <div className="flex items-center justify-between mb-4">
+                <span className="px-3 py-1 rounded-full bg-slate-800 text-blue-300 text-xs font-bold border border-slate-700">
+                  Portal Pimpinan & Admin (/admin/login)
+                </span>
+                <Lock className="w-6 h-6 text-emerald-400" />
               </div>
-              <span className="px-2.5 py-1 rounded-full bg-slate-800 text-sora-300 text-xs font-bold border border-slate-700">
-                Control Room Admin (/admin)
-              </span>
-              <h3 className="font-display font-bold text-2xl text-white mt-3">
-                Panel Administrator & Supervisor
+              <h3 className="font-display font-bold text-2xl text-white">
+                Kepala Sekolah, Pengawas & Admin
               </h3>
               <p className="text-sm text-slate-300 mt-2 leading-relaxed">
-                Kelola konfigurasi API (OpenAI-compatible, Fish Audio TTS, Bot
-                Shiroko), susun instrumen pertanyaan dengan bantuan AI, tugaskan
-                guru, pantau grafik seluruh sekolah, dan atur template dokumen.
+                Verifikasi perangkat guru, jalankan AI Co-Evaluator, sahkan &
+                kunci berita acara (Immutable), tetapkan RTL Pengawas Sekolah,
+                serta kelola API AI & Bot WhatsApp.
               </p>
-              <ul className="mt-4 space-y-2 text-xs text-slate-300 font-medium">
-                <li className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-sakura-400" />
-                  Enkripsi API Key AES-256, Editor System Prompt & Rubrik AI
-                </li>
-                <li className="flex items-center gap-2">
-                  <FileSpreadsheet className="w-4 h-4 text-sora-400" />
-                  Rekapitulasi grafik radar/batang, koreksi nilai & export ZIP massal
-                </li>
-              </ul>
             </div>
 
             <div className="mt-6 pt-4 border-t border-slate-800">
               <Link
                 href="/admin/login"
-                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-white text-slate-900 font-bold text-sm shadow-md hover:bg-sora-50 transition"
+                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-white text-slate-900 font-bold text-sm shadow-md hover:bg-blue-50 transition"
               >
-                Masuk ke Control Room Admin
+                Masuk Portal Pimpinan & Admin
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
@@ -155,8 +191,8 @@ export default async function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="max-w-5xl w-full mx-auto text-center text-xs text-slate-400">
-        Web Agent Supervisor Pendidikan v2 • Pemisahan Penuh Role Admin & Guru • Sensei-AI
+      <footer className="max-w-6xl w-full mx-auto text-center text-xs text-slate-500">
+        SIPENA • Sistem Informasi Supervisi & Evaluasi Akademik Berbasis AI • 4-Role & Integrasi Bot WhatsApp
       </footer>
     </div>
   );

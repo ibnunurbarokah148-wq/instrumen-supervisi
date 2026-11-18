@@ -4,15 +4,30 @@ import { NextResponse } from "next/server";
 
 export const COOKIE_NAME = "sensei_session";
 
+export type UserRole = "admin" | "kepala_sekolah" | "pengawas" | "guru";
+
+export const SUPERVISOR_ROLES: UserRole[] = [
+  "admin",
+  "kepala_sekolah",
+  "pengawas",
+];
+
+export function isSupervisorRole(role?: string | null): boolean {
+  return (
+    role === "admin" || role === "kepala_sekolah" || role === "pengawas"
+  );
+}
+
 export interface SessionPayload {
   userId: string;
   email: string;
   nama: string;
-  role: "admin" | "guru";
+  role: UserRole;
 }
 
 function getSecretKey(): Uint8Array {
-  const secret = process.env.JWT_SECRET || "sensei-ai-super-secret-jwt-key-2026-v2";
+  const secret =
+    process.env.JWT_SECRET || "sipena-supervisi-akademik-secret-jwt-2026";
   return new TextEncoder().encode(secret);
 }
 
@@ -31,7 +46,10 @@ export async function verifyToken(token: string): Promise<SessionPayload | null>
       typeof payload.userId === "string" &&
       typeof payload.email === "string" &&
       typeof payload.nama === "string" &&
-      (payload.role === "admin" || payload.role === "guru")
+      (payload.role === "admin" ||
+        payload.role === "kepala_sekolah" ||
+        payload.role === "pengawas" ||
+        payload.role === "guru")
     ) {
       return {
         userId: payload.userId,
@@ -58,7 +76,8 @@ export async function getSession(): Promise<SessionPayload | null> {
 }
 
 export async function requireAdmin(): Promise<
-  { session: SessionPayload; error?: undefined } | { session?: undefined; error: NextResponse }
+  | { session: SessionPayload; error?: undefined }
+  | { session?: undefined; error: NextResponse }
 > {
   const session = await getSession();
   if (!session) {
@@ -69,10 +88,13 @@ export async function requireAdmin(): Promise<
       ),
     };
   }
-  if (session.role !== "admin") {
+  if (!isSupervisorRole(session.role)) {
     return {
       error: NextResponse.json(
-        { error: "Akses ditolak (403): Endpoint ini khusus untuk Admin." },
+        {
+          error:
+            "Akses ditolak (403): Endpoint ini khusus untuk Kepala Sekolah, Pengawas Sekolah, atau Admin.",
+        },
         { status: 403 }
       ),
     };
@@ -81,7 +103,8 @@ export async function requireAdmin(): Promise<
 }
 
 export async function requireGuru(): Promise<
-  { session: SessionPayload; error?: undefined } | { session?: undefined; error: NextResponse }
+  | { session: SessionPayload; error?: undefined }
+  | { session?: undefined; error: NextResponse }
 > {
   const session = await getSession();
   if (!session) {
@@ -95,7 +118,7 @@ export async function requireGuru(): Promise<
   if (session.role !== "guru") {
     return {
       error: NextResponse.json(
-        { error: "Akses ditolak (403): Endpoint ini khusus untuk Guru." },
+        { error: "Akses ditolak (403): Endpoint ini khusus untuk role Guru." },
         { status: 403 }
       ),
     };
@@ -104,7 +127,8 @@ export async function requireGuru(): Promise<
 }
 
 export async function requireAuth(): Promise<
-  { session: SessionPayload; error?: undefined } | { session?: undefined; error: NextResponse }
+  | { session: SessionPayload; error?: undefined }
+  | { session?: undefined; error: NextResponse }
 > {
   const session = await getSession();
   if (!session) {
@@ -118,7 +142,7 @@ export async function requireAuth(): Promise<
   return { session };
 }
 
-// Simple in-memory rate limiter for Login and AI endpoints (PRD Section 14)
+// Simple in-memory rate limiter for Login and AI endpoints
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
 export function checkRateLimit(

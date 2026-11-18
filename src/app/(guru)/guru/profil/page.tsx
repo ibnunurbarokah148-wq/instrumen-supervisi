@@ -11,10 +11,10 @@ import {
 } from "lucide-react";
 
 const AVATAR_PRESETS = [
-  "🌸 Sensei Sakura",
-  "⚡ Sensei Sora",
-  "📚 Sensei Akademia",
-  "✨ Sensei Inovator",
+  "Pendidik Profesional",
+  "Guru Penggerak Akademik",
+  "Koordinator Mapel",
+  "Inovator Pembelajaran",
 ];
 
 export default function GuruProfilPage() {
@@ -24,7 +24,7 @@ export default function GuruProfilPage() {
   const [mapel, setMapel] = useState("");
   const [nomorWA, setNomorWA] = useState("");
   const [fotoUrl, setFotoUrl] = useState("");
-  const [badges, setBadges] = useState<string[]>([]);
+
 
   const [passwordLama, setPasswordLama] = useState("");
   const [passwordBaru, setPasswordBaru] = useState("");
@@ -47,11 +47,6 @@ export default function GuruProfilPage() {
           setMapel(u.mapel || "");
           setNomorWA(u.nomorWA || "");
           setFotoUrl(u.fotoUrl || AVATAR_PRESETS[0]);
-          try {
-            setBadges(JSON.parse(u.badgesJSON || "[]"));
-          } catch {
-            setBadges([]);
-          }
         }
       }
     })();
@@ -116,28 +111,16 @@ export default function GuruProfilPage() {
               Profil Akun Guru
             </span>
             <h2 className="font-display font-extrabold text-xl text-slate-900 mt-1">
-              {nama || "Sensei"}
+              {nama || "Pendidik SIPENA"}
             </h2>
             <p className="text-xs text-slate-500">{email}</p>
-            {badges.length > 0 && (
-              <div className="flex flex-wrap justify-center sm:justify-start gap-1.5 mt-2">
-                {badges.map((b, i) => (
-                  <span
-                    key={i}
-                    className="px-2.5 py-0.5 rounded-lg bg-sakura-50 border border-sakura-200 text-sakura-700 text-[11px] font-bold"
-                  >
-                    {b}
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
         </div>
 
         {/* Pilihan Badge / Avatar Tampilan */}
         <div>
           <label className="block text-xs font-bold text-slate-700 mb-2">
-            Gaya Avatar / Gelar Tampilan Sensei
+            Peran / Kualifikasi Akademik Pendidik
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {AVATAR_PRESETS.map((av) => (
@@ -198,7 +181,7 @@ export default function GuruProfilPage() {
 
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Nomor WhatsApp (Untuk Pengiriman Podcast Shiroko)
+              Nomor WhatsApp (Untuk Pengiriman Hasil & PDF via Bot Shiroko)
             </label>
             <input
               type="text"

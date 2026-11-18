@@ -10,9 +10,12 @@ export async function GET() {
 
   await ensureSeeded(false);
 
-  const [totalGuru, hasilList, totalPodcast, settings, recentLogs] =
+  const [totalGuru, penugasanAll, hasilList, settings, recentLogs] =
     await Promise.all([
       prisma.user.count({ where: { role: "guru" } }),
+      prisma.penugasan.findMany({
+        select: { id: true, status: true },
+      }),
       prisma.hasil.findMany({
         where: { status: "selesai" },
         include: {
@@ -22,11 +25,9 @@ export async function GET() {
               instrumen: { select: { judul: true } },
             },
           },
-          podcast: { select: { id: true, status: true, durasi: true } },
         },
         orderBy: { createdAt: "asc" },
       }),
-      prisma.podcast.count({ where: { status: "selesai" } }),
       getAllSettingsDecrypted(),
       prisma.logAktivitas.findMany({
         orderBy: { waktu: "desc" },
@@ -35,6 +36,24 @@ export async function GET() {
     ]);
 
   const totalSupervisi = hasilList.length;
+  const totalDisahkan = hasilList.filter((h) => h.disahkan).length;
+  const totalTindakLanjut = hasilList.filter((h) => Boolean(h.rtlRekomendasi)).length;
+
+  const pipeline = {
+    belum: penugasanAll.filter(
+      (p) => p.status === "belum" || p.status === "draft"
+    ).length,
+    menungguVerifikasi: penugasanAll.filter(
+      (p) => p.status === "menunggu_verifikasi"
+    ).length,
+    perluRevisi: penugasanAll.filter((p) => p.status === "perlu_revisi").length,
+    dalamPenilaian: penugasanAll.filter((p) => p.status === "dalam_penilaian")
+      .length,
+    disahkanKepsek: penugasanAll.filter((p) => p.status === "selesai").length,
+    tindakLanjut: penugasanAll.filter((p) => p.status === "tindak_lanjut")
+      .length,
+  };
+
   const rataRataSkor =
     totalSupervisi > 0
       ? Number(
@@ -44,7 +63,7 @@ export async function GET() {
         )
       : 0;
 
-  // Hitung rata-rata skor per aspek untuk Grafik Radar Admin
+  // Rata-rata skor per aspek untuk Grafik Radar
   const aspectTotals = new Map<string, { sum: number; count: number }>();
   for (const h of hasilList) {
     try {
@@ -104,21 +123,13 @@ export async function GET() {
         ? "Terhubung (API Key Tersimpan)"
         : "Belum Diatur (API Key Kosong)",
     },
-    fishAudio: {
-      configured: Boolean(settings.fish_api_key?.trim()),
-      voiceId: settings.fish_voice_id,
-      model: settings.fish_model,
-      label: settings.fish_api_key?.trim()
-        ? "Terhubung (Fish Audio TTS)"
-        : "Belum Diatur (API Key Kosong)",
-    },
     shiroko: {
       enabled: settings.shiroko_enabled === "true",
       url: settings.shiroko_url,
       label:
         settings.shiroko_enabled === "true"
-          ? "Aktif (Webhook Siap)"
-          : "Nonaktif",
+          ? "Aktif (Bot WA Siap)"
+          : "Mode Pull API Aktif",
     },
   };
 
@@ -127,8 +138,10 @@ export async function GET() {
       totalGuru,
       totalSupervisi,
       rataRataSkor,
-      totalPodcast,
+      totalDisahkan,
+      totalTindakLanjut,
     },
+    pipeline,
     statusKoneksi,
     radarAspek,
     trenMingguan,
@@ -137,7 +150,7 @@ export async function GET() {
   });
 }
 
-// POST untuk mereset / memuat ulang data demo saat presentasi ke dosen (PRD Bagian 13)
+// POST untuk memuat ulang data demo saat presentasi
 export async function POST() {
   const { session, error } = await requireAdmin();
   if (error) return error;
@@ -146,13 +159,13 @@ export async function POST() {
   await logActivity({
     userId: session.userId,
     namaUser: session.nama,
-    role: "admin",
+    role: session.role,
     aksi: "RESET_DATA_DEMO",
-    detail: "Admin memuat ulang data contoh (Demo Mode) untuk presentasi",
+    detail: "Memuat ulang seluruh data demo SIPENA 4-Role",
   });
 
   return NextResponse.json({
     success: true,
-    message: "Data contoh (Demo Mode) berhasil dimuat ulang!",
+    message: "Data contoh (Demo SIPENA) berhasil dimuat ulang!",
   });
 }

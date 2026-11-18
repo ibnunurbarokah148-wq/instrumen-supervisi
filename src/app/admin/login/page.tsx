@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SenseiMascot } from "@/components/SenseiMascot";
+import { RoleSwitcher } from "@/components/RoleSwitcher";
 import {
   ShieldCheck,
   Lock,
@@ -14,8 +15,8 @@ import {
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
+  const [identifier, setIdentifier] = useState("kepsek@sekolah.sch.id");
+  const [password, setPassword] = useState("admin123");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -50,24 +51,24 @@ export default function AdminLoginPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden">
-      {/* Dekorasi Cahaya Pastel di Latar Gelap Control Room */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-sora-500/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-sakura-500/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -top-32 -left-32 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-6">
           <div className="inline-flex justify-center mb-3">
             <SenseiMascot size="md" mood="control" />
           </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-sora-500/40 text-sora-300 text-xs font-bold">
-            <ShieldCheck className="w-3.5 h-3.5 text-sakura-400" />
-            Control Room Administrator (/admin/login)
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-blue-500/40 text-blue-300 text-xs font-bold">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            Portal Pimpinan, Pengawas & Admin (/admin/login)
           </div>
           <h1 className="font-display font-bold text-2xl text-white mt-2">
-            Panel Kendali Sensei-AI
+            Panel Manajemen SIPENA
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Akses khusus Administrator & Supervisor untuk mengelola API, instrumen, dan seluruh data guru.
+            Akses Kepala Sekolah, Pengawas Pembina, dan Administrator untuk
+            verifikasi, penilaian observasi AI, pengesahan, serta penetapan RTL.
           </p>
         </div>
 
@@ -82,21 +83,21 @@ export default function AdminLoginPage() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                Email atau NIP Administrator
+                Email atau NIP (Kepala Sekolah / Pengawas / Admin)
               </label>
               <input
                 type="text"
                 required
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="admin@sekolah.sch.id"
-                className="w-full px-4 py-3 rounded-2xl border border-slate-700 bg-slate-950/80 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sora-400 transition"
+                placeholder="kepsek@sekolah.sch.id"
+                className="w-full px-4 py-3 rounded-2xl border border-slate-700 bg-slate-950/80 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                Password Rahasia
+                Password
               </label>
               <div className="relative">
                 <input
@@ -105,7 +106,7 @@ export default function AdminLoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-700 bg-slate-950/80 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sora-400 transition pr-10"
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-700 bg-slate-950/80 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition pr-10"
                 />
                 <button
                   type="button"
@@ -124,11 +125,20 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-sora-500 to-sakura-500 text-white font-bold text-sm shadow-lg hover:opacity-95 disabled:opacity-50 transition flex items-center justify-center gap-2"
+              className="w-full py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-lg disabled:opacity-50 transition flex items-center justify-center gap-2"
             >
               <Lock className="w-4 h-4" />
-              {loading ? "Mengautentikasi..." : "Masuk ke Control Room Admin"}
+              {loading ? "Mengautentikasi..." : "Masuk ke Portal Manajemen"}
             </button>
+
+            <div className="pt-3 border-t border-slate-800 text-center space-y-2">
+              <p className="text-[11px] font-bold text-slate-400">
+                Akses Cepat Demo 4 Peran (1-Klik)
+              </p>
+              <div className="flex justify-center">
+                <RoleSwitcher dark />
+              </div>
+            </div>
           </form>
         </div>
 
@@ -136,8 +146,8 @@ export default function AdminLoginPage() {
           <Link href="/" className="hover:text-white font-semibold">
             ← Kembali ke Beranda
           </Link>
-          <Link href="/login" className="hover:text-sora-300 font-semibold">
-            Bukan Admin? Masuk Portal Guru →
+          <Link href="/login" className="hover:text-blue-300 font-semibold">
+            Bukan Pimpinan? Masuk Portal Guru →
           </Link>
         </div>
       </div>

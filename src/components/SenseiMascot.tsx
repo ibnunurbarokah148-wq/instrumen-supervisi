@@ -8,6 +8,10 @@ interface SenseiMascotProps {
   className?: string;
 }
 
+/**
+ * Emblem Institusi Formal SIPENA — Sistem Informasi Supervisi & Evaluasi Akademik.
+ * Menggantikan maskot anime sebelumnya dengan lencana akademik resmi Kemendikbudristek.
+ */
 export function SenseiMascot({
   size = "md",
   mood = "happy",
@@ -17,158 +21,100 @@ export function SenseiMascot({
     sm: "w-11 h-11",
     md: "w-16 h-16",
     lg: "w-24 h-24",
-    xl: "w-32 h-32",
+    xl: "w-28 h-28",
   }[size];
+
+  const badgeTitle =
+    mood === "thinking"
+      ? "Asisten AI Co-Evaluator • Analisis Instrumen Supervisi"
+      : mood === "control"
+      ? "Panel Kontrol Kepala Sekolah & Pengawas Pembina"
+      : "SIPENA • Sistem Informasi Supervisi & Evaluasi Akademik";
 
   return (
     <div
       className={`relative inline-flex items-center justify-center select-none ${dimensions} ${className}`}
-      title="Sensei-AI • Agent Supervisor Pendidikan"
+      title={badgeTitle}
     >
-      {/* Halo Sakura Pastel */}
       <svg
         viewBox="0 0 120 120"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="w-full h-full drop-shadow-sm animate-float"
+        className="w-full h-full drop-shadow-sm"
       >
-        {/* Lingkaran latar belakang pastel */}
-        <circle cx="60" cy="62" r="52" fill="url(#bgGrad)" stroke="#bae3fd" strokeWidth="3" />
+        <defs>
+          <linearGradient id="sipenaShieldBg" x1="12" y1="8" x2="108" y2="112" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#0f294a" />
+            <stop offset="55%" stopColor="#1d4ed8" />
+            <stop offset="100%" stopColor="#0284c7" />
+          </linearGradient>
+          <linearGradient id="sipenaGold" x1="30" y1="20" x2="90" y2="95" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#fde68a" />
+            <stop offset="100%" stopColor="#f59e0b" />
+          </linearGradient>
+        </defs>
 
-        {/* Halo Digital di atas kepala (gaya anime akademik) */}
-        <ellipse
-          cx="60"
-          cy="11"
-          rx="24"
-          ry="5"
-          stroke="#38b5f7"
-          strokeWidth="2.5"
-          strokeDasharray="6 3"
-          fill="none"
-        />
-        <circle cx="84" cy="11" r="3" fill="#f43f80" />
-
-        {/* Rambut Belakang Biru Langit (Sora) */}
+        {/* Perisai Akademik Luar */}
         <path
-          d="M24 58C24 32 39 20 60 20C81 20 96 32 96 58C96 76 91 92 84 99H36C29 92 24 76 24 58Z"
-          fill="#38b5f7"
+          d="M60 8L102 22V56C102 82.5 84.5 103.5 60 112C35.5 103.5 18 82.5 18 56V22L60 8Z"
+          fill="url(#sipenaShieldBg)"
+          stroke="#e0f2fe"
+          strokeWidth="3"
         />
 
-        {/* Bahu / Jas Supervisor Putih-Biru */}
+        {/* Bingkai Dalam Halus */}
         <path
-          d="M30 105C34 90 45 86 60 86C75 86 86 90 90 105"
-          fill="#ffffff"
-          stroke="#027cc6"
-          strokeWidth="2.5"
-        />
-        {/* Pita / Dasi Sakura */}
-        <path d="M54 88L60 95L66 88L60 103Z" fill="#f43f80" />
-
-        {/* Wajah */}
-        <path
-          d="M36 56C36 41 46 33 60 33C74 33 84 41 84 56C84 72 73 83 60 83C47 83 36 72 36 56Z"
-          fill="#fff5f0"
-        />
-
-        {/* Pipi Merona Sakura */}
-        <ellipse cx="44" cy="64" rx="4.5" ry="2.5" fill="#fda4c2" opacity="0.75" />
-        <ellipse cx="76" cy="64" rx="4.5" ry="2.5" fill="#fda4c2" opacity="0.75" />
-
-        {/* Mata sesuai mood */}
-        {mood === "thinking" ? (
-          <>
-            <circle cx="48" cy="56" r="4.2" fill="#0c466e" />
-            <circle cx="49.5" cy="54.5" r="1.5" fill="#ffffff" />
-            <path
-              d="M67 56C69 53 74 53 76 56"
-              stroke="#0c466e"
-              strokeWidth="2.8"
-              strokeLinecap="round"
-            />
-          </>
-        ) : mood === "cheer" ? (
-          <>
-            <path
-              d="M43 56C45 52 50 52 52 56"
-              stroke="#0c466e"
-              strokeWidth="2.8"
-              strokeLinecap="round"
-            />
-            <path
-              d="M68 56C70 52 75 52 77 56"
-              stroke="#0c466e"
-              strokeWidth="2.8"
-              strokeLinecap="round"
-            />
-          </>
-        ) : (
-          <>
-            <ellipse cx="48" cy="56" rx="4.2" ry="5" fill="#0c466e" />
-            <circle cx="49.5" cy="54" r="1.7" fill="#ffffff" />
-            <circle cx="47" cy="58" r="0.9" fill="#38b5f7" />
-
-            <ellipse cx="72" cy="56" rx="4.2" ry="5" fill="#0c466e" />
-            <circle cx="73.5" cy="54" r="1.7" fill="#ffffff" />
-            <circle cx="71" cy="58" r="0.9" fill="#38b5f7" />
-          </>
-        )}
-
-        {/* Kacamata Sensei Tipis */}
-        <rect
-          x="40"
-          y="50"
-          width="16"
-          height="11"
-          rx="4"
-          stroke="#027cc6"
-          strokeWidth="1.6"
-          fill="none"
-          opacity="0.75"
-        />
-        <rect
-          x="64"
-          y="50"
-          width="16"
-          height="11"
-          rx="4"
-          stroke="#027cc6"
-          strokeWidth="1.6"
-          fill="none"
-          opacity="0.75"
-        />
-        <line x1="56" y1="55" x2="64" y2="55" stroke="#027cc6" strokeWidth="1.6" />
-
-        {/* Senyum */}
-        {mood === "thinking" ? (
-          <circle cx="60" cy="69" r="2.3" fill="#e11d67" />
-        ) : (
-          <path
-            d="M55 67C57 71 63 71 65 67"
-            stroke="#e11d67"
-            strokeWidth="2.3"
-            strokeLinecap="round"
-          />
-        )}
-
-        {/* Poni Rambut Depan */}
-        <path
-          d="M32 50C34 32 46 24 60 24C74 24 86 32 88 50C82 40 76 37 70 44C66 36 56 35 51 44C45 37 37 40 32 50Z"
-          fill="#7dcefb"
-          stroke="#0e9ce8"
+          d="M60 15L95 26.8V56C95 78.6 80.2 96.8 60 104.2C39.8 96.8 25 78.6 25 56V26.8L60 15Z"
+          stroke="rgba(255,255,255,0.22)"
           strokeWidth="1.5"
         />
 
-        {/* Jepit Bunga Sakura di Rambut */}
-        <circle cx="81" cy="38" r="6" fill="#fb71a1" />
-        <circle cx="81" cy="38" r="2.2" fill="#fff1f5" />
+        {/* Buku Terbuka (Simbol Akademik & Kurikulum) */}
+        <path
+          d="M36 47C36 44.8 37.8 43 40 43H58V78H41C38.2 78 36 75.8 36 73V47Z"
+          fill="#ffffff"
+          fillOpacity="0.95"
+        />
+        <path
+          d="M84 47C84 44.8 82.2 43 80 43H62V78H79C81.8 78 84 75.8 84 73V47Z"
+          fill="#e0f2fe"
+        />
+        <line x1="60" y1="43" x2="60" y2="79" stroke="#1e3a8a" strokeWidth="2.2" />
 
-        <defs>
-          <linearGradient id="bgGrad" x1="10" y1="10" x2="110" y2="110" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#e0f1fe" />
-            <stop offset="0.6" stopColor="#ffffff" />
-            <stop offset="1" stopColor="#ffe4ec" />
-          </linearGradient>
-        </defs>
+        {/* Garis Teks Simbolik pada Buku */}
+        <line x1="42" y1="52" x2="53" y2="52" stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round" />
+        <line x1="42" y1="59" x2="53" y2="59" stroke="#64748b" strokeWidth="2" strokeLinecap="round" />
+        <line x1="42" y1="66" x2="51" y2="66" stroke="#64748b" strokeWidth="2" strokeLinecap="round" />
+
+        {/* Centang Verifikasi Supervisi */}
+        <path
+          d="M67 60L72 65L80 54"
+          stroke="#059669"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Bintang Kecerdasan Artifisial di Atas Buku */}
+        <path
+          d="M60 22L63.2 29.8L71 33L63.2 36.2L60 44L56.8 36.2L49 33L56.8 29.8L60 22Z"
+          fill="url(#sipenaGold)"
+        />
+
+        {/* Pita Status */}
+        <rect x="37" y="83" width="46" height="12" rx="6" fill="#0f172a" fillOpacity="0.85" stroke="#38bdf8" strokeWidth="1" />
+        <text
+          x="60"
+          y="91.5"
+          textAnchor="middle"
+          fill="#f8fafc"
+          fontSize="7.5"
+          fontWeight="bold"
+          fontFamily="sans-serif"
+          letterSpacing="0.8"
+        >
+          SIPENA
+        </text>
       </svg>
     </div>
   );

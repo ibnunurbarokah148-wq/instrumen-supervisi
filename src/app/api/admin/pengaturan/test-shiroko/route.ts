@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       event: "test_message",
       nomorTujuan,
       pesan:
-        "🌸 [Sensei-AI Supervisor] Halo Sensei! Ini adalah pesan uji coba integrasi dari Dashboard Admin Web Agent Supervisor ke Bot Shiroko.",
+        "📋 [SIPENA Supervisi Akademik] Uji coba koneksi Bot WhatsApp Gateway berhasil. Notifikasi & laporan PDF supervisi siap dikirim ke Guru dan Supervisor.",
       timestamp: new Date().toISOString(),
     };
 

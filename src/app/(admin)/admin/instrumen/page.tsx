@@ -108,20 +108,216 @@ export default function AdminInstrumenPage() {
 
   const handleStartNew = () => {
     setSelectedId("new");
-    setJudul("Instrumen Supervisi Baru");
-    setDeskripsi("Deskripsi tujuan dan cakupan supervisi akademik...");
+    setJudul("Instrumen Supervisi Akademik Berbasis TI (Kurikulum Merdeka)");
+    setDeskripsi(
+      "Observasi pembelajaran di kelas yang mencakup 4 aspek: Pembukaan Pembelajaran, Kegiatan Inti, Asesmen dan Penutup, serta Pemanfaatan Teknologi Informasi."
+    );
     setStatus("aktif");
     setQuestions([
       {
-        teks: "Kelengkapan rencana pembelajaran dan pemetaan capaian siswa.",
+        teks: "Guru membuka pembelajaran dengan salam, doa, dan menyiapkan kondisi belajar peserta didik",
         tipe: "skala",
-        aspek: "Perencanaan",
-        bobot: 1.5,
+        aspek: "Pembukaan Pembelajaran",
+        bobot: 1.0,
         urutan: 1,
         wajib: true,
-        opsi: ["1", "2", "3", "4", "5"],
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
       },
     ]);
+  };
+
+  const handleLoadTemplatePDF = () => {
+    const template20: QuestionItem[] = [
+      // Aspek 1: Pembukaan Pembelajaran (1 - 4)
+      {
+        teks: "Guru membuka pembelajaran dengan salam, doa, dan menyiapkan kondisi belajar peserta didik",
+        tipe: "skala",
+        aspek: "Pembukaan Pembelajaran",
+        bobot: 1.0,
+        urutan: 1,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru melakukan apersepsi atau pemantik yang mengaitkan materi dengan pengalaman peserta didik",
+        tipe: "skala",
+        aspek: "Pembukaan Pembelajaran",
+        bobot: 1.0,
+        urutan: 2,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru menyampaikan tujuan pembelajaran dan alur kegiatan dengan jelas",
+        tipe: "skala",
+        aspek: "Pembukaan Pembelajaran",
+        bobot: 1.0,
+        urutan: 3,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Pembelajaran sesuai dengan modul ajar yang telah disusun",
+        tipe: "skala",
+        aspek: "Pembukaan Pembelajaran",
+        bobot: 1.0,
+        urutan: 4,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      // Aspek 2: Kegiatan Inti (5 - 12)
+      {
+        teks: "Guru menguasai materi dan menjelaskannya secara runtut dan benar",
+        tipe: "skala",
+        aspek: "Kegiatan Inti",
+        bobot: 1.0,
+        urutan: 5,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru menerapkan pembelajaran berdiferensiasi (konten, proses, atau produk) sesuai kebutuhan peserta didik",
+        tipe: "skala",
+        aspek: "Kegiatan Inti",
+        bobot: 1.0,
+        urutan: 6,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru menggunakan model atau metode yang membuat peserta didik aktif (diskusi, kerja kelompok, pengamatan, proyek)",
+        tipe: "skala",
+        aspek: "Kegiatan Inti",
+        bobot: 1.0,
+        urutan: 7,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru menggunakan media atau sumber belajar yang relevan dan menarik",
+        tipe: "skala",
+        aspek: "Kegiatan Inti",
+        bobot: 1.0,
+        urutan: 8,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru memberikan pertanyaan yang merangsang berpikir dan memberi kesempatan semua peserta didik menjawab",
+        tipe: "skala",
+        aspek: "Kegiatan Inti",
+        bobot: 1.0,
+        urutan: 9,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru mengintegrasikan penguatan karakter Profil Pelajar Pancasila dalam kegiatan",
+        tipe: "skala",
+        aspek: "Kegiatan Inti",
+        bobot: 1.0,
+        urutan: 10,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru mengelola kelas dengan baik (suasana kondusif, aturan kelas, pengelolaan waktu)",
+        tipe: "skala",
+        aspek: "Kegiatan Inti",
+        bobot: 1.0,
+        urutan: 11,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Interaksi guru dan peserta didik positif, ramah, dan menghargai pendapat",
+        tipe: "skala",
+        aspek: "Kegiatan Inti",
+        bobot: 1.0,
+        urutan: 12,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      // Aspek 3: Asesmen dan Penutup (13 - 16)
+      {
+        teks: "Guru melakukan asesmen formatif selama pembelajaran (observasi, tanya jawab, tugas, kuis)",
+        tipe: "skala",
+        aspek: "Asesmen dan Penutup",
+        bobot: 1.0,
+        urutan: 13,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru memberikan umpan balik yang membangun kepada peserta didik",
+        tipe: "skala",
+        aspek: "Asesmen dan Penutup",
+        bobot: 1.0,
+        urutan: 14,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru bersama peserta didik menyimpulkan materi dan melakukan refleksi",
+        tipe: "skala",
+        aspek: "Asesmen dan Penutup",
+        bobot: 1.0,
+        urutan: 15,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru menyampaikan tindak lanjut (tugas, pengayaan, atau rencana pertemuan berikutnya)",
+        tipe: "skala",
+        aspek: "Asesmen dan Penutup",
+        bobot: 1.0,
+        urutan: 16,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      // Aspek 4: Pemanfaatan Teknologi Informasi (17 - 20)
+      {
+        teks: "Guru memanfaatkan perangkat TIK (proyektor, laptop, HP, atau TV) untuk mendukung pembelajaran",
+        tipe: "skala",
+        aspek: "Pemanfaatan Teknologi Informasi",
+        bobot: 1.0,
+        urutan: 17,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru menggunakan sumber belajar digital (video, gambar, aplikasi, atau kuis daring) yang sesuai materi",
+        tipe: "skala",
+        aspek: "Pemanfaatan Teknologi Informasi",
+        bobot: 1.0,
+        urutan: 18,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru membimbing peserta didik memakai teknologi dengan aman dan bertanggung jawab",
+        tipe: "skala",
+        aspek: "Pemanfaatan Teknologi Informasi",
+        bobot: 1.0,
+        urutan: 19,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+      {
+        teks: "Guru memanfaatkan platform digital (misalnya Google Classroom atau Platform Merdeka Mengajar) untuk pembelajaran atau pengembangan diri",
+        tipe: "skala",
+        aspek: "Pemanfaatan Teknologi Informasi",
+        bobot: 1.0,
+        urutan: 20,
+        wajib: true,
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
+      },
+    ];
+    setQuestions(template20);
+    setToast(
+      "✅ 20 Butir Indikator Standar Kurikulum Merdeka (4 Aspek PDF) berhasil dimuat! Klik Simpan Instrumen untuk menerapkan."
+    );
+    setTimeout(() => setToast(""), 5000);
   };
 
   const addQuestion = () => {
@@ -130,11 +326,11 @@ export default function AdminInstrumenPage() {
       {
         teks: "",
         tipe: "skala",
-        aspek: "Pelaksanaan",
+        aspek: "Kegiatan Inti",
         bobot: 1.0,
         urutan: prev.length + 1,
         wajib: true,
-        opsi: ["1", "2", "3", "4", "5"],
+        opsi: ["1 - Kurang", "2 - Cukup", "3 - Baik", "4 - Sangat Baik"],
       },
     ]);
   };
@@ -206,7 +402,7 @@ export default function AdminInstrumenPage() {
           return combined;
         });
         setToast(
-          `✨ Sensei-AI berhasil menambahkan ${data.questions.length} pertanyaan untuk topik "${aiTopic}"!`
+          `✨ Asisten AI SIPENA berhasil menambahkan ${data.questions.length} pertanyaan untuk topik "${aiTopic}"!`
         );
         setTimeout(() => setToast(""), 4500);
       }
@@ -338,10 +534,10 @@ export default function AdminInstrumenPage() {
               Asisten Pembuat Soal AI
             </div>
             <h4 className="font-display font-bold text-slate-900 text-sm">
-              Buat Pertanyaan dengan Sensei-AI
+              Buat Pertanyaan dengan Asisten AI SIPENA
             </h4>
             <p className="text-xs text-slate-600">
-              Masukkan topik supervisi, Sensei-AI akan menyarankan butir pertanyaan lengkap dengan aspek & bobotnya.
+              Masukkan topik supervisi, Asisten AI akan menyarankan butir indikator lengkap dengan aspek & bobotnya.
             </p>
             <input
               type="text"
@@ -466,18 +662,56 @@ export default function AdminInstrumenPage() {
 
           {/* Daftar Pertanyaan (Drag & Drop + Reorder + Duplikasi) */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="font-display font-bold text-sm text-slate-800">
                 Daftar Butir Pertanyaan ({questions.length} Soal)
               </h4>
-              <button
-                type="button"
-                onClick={addQuestion}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sora-500 hover:bg-sora-600 text-white text-xs font-bold shadow-sm transition"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Tambah Pertanyaan
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleLoadTemplatePDF}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-sakura-200 bg-sakura-50 hover:bg-sakura-100 text-sakura-700 text-xs font-bold shadow-xs transition"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Muat 20 Indikator Standar Kurikulum Merdeka (PDF)
+                </button>
+                <button
+                  type="button"
+                  onClick={addQuestion}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sora-500 hover:bg-sora-600 text-white text-xs font-bold shadow-sm transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Tambah Pertanyaan
+                </button>
+              </div>
+            </div>
+
+            {/* Ringkasan 4 Aspek Penilaian sesuai Dokumen PDF */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {[
+                { label: "Pembukaan Pembelajaran", kode: "Aspek 1" },
+                { label: "Kegiatan Inti", kode: "Aspek 2" },
+                { label: "Asesmen dan Penutup", kode: "Aspek 3" },
+                { label: "Pemanfaatan Teknologi Informasi", kode: "Aspek 4" },
+              ].map((asp) => {
+                const count = questions.filter((q) => q.aspek === asp.label).length;
+                return (
+                  <div
+                    key={asp.label}
+                    className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between"
+                  >
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-sora-600">
+                      {asp.kode}
+                    </span>
+                    <p className="text-xs font-bold text-slate-800 line-clamp-1 mt-0.5">
+                      {asp.label}
+                    </p>
+                    <span className="text-[11px] text-slate-500 font-semibold mt-1">
+                      {count} Butir Indikator
+                    </span>
+                  </div>
+                );
+              })}
             </div>
 
             {questions.map((q, idx) => (
@@ -497,7 +731,7 @@ export default function AdminInstrumenPage() {
                     <span className="px-2.5 py-0.5 rounded-lg bg-slate-900 text-white text-xs font-bold">
                       #{idx + 1}
                     </span>
-                    <span className="text-xs font-bold text-sora-700">
+                    <span className="px-2.5 py-0.5 rounded-lg bg-sora-50 border border-sora-200 text-xs font-bold text-sora-700">
                       Aspek: {q.aspek}
                     </span>
                   </div>
@@ -574,17 +808,17 @@ export default function AdminInstrumenPage() {
                       }}
                       className="w-full px-2.5 py-2 rounded-xl border border-slate-200 text-xs bg-white font-semibold"
                     >
-                      <option value="skala">Skala 1 - 5</option>
+                      <option value="skala">Skala Penilaian (1-4 / 1-5)</option>
                       <option value="pilihan_ganda">Pilihan Ganda</option>
                       <option value="ya_tidak">Ya / Tidak</option>
                       <option value="isian_singkat">Isian Singkat</option>
-                      <option value="esai">Esai Reflektif</option>
+                      <option value="esai">Esai Reflektif / Catatan</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                      Aspek Penilaian
+                      Aspek Penilaian (Standar PDF)
                     </label>
                     <select
                       value={q.aspek}
@@ -595,10 +829,26 @@ export default function AdminInstrumenPage() {
                       }}
                       className="w-full px-2.5 py-2 rounded-xl border border-slate-200 text-xs bg-white font-semibold"
                     >
-                      <option value="Perencanaan">Perencanaan</option>
-                      <option value="Pelaksanaan">Pelaksanaan</option>
-                      <option value="Penguasaan IT">Penguasaan IT</option>
-                      <option value="Evaluasi">Evaluasi</option>
+                      <option value="Pembukaan Pembelajaran">
+                        Aspek 1: Pembukaan Pembelajaran
+                      </option>
+                      <option value="Kegiatan Inti">
+                        Aspek 2: Kegiatan Inti
+                      </option>
+                      <option value="Asesmen dan Penutup">
+                        Aspek 3: Asesmen dan Penutup
+                      </option>
+                      <option value="Pemanfaatan Teknologi Informasi">
+                        Aspek 4: Pemanfaatan Teknologi Informasi
+                      </option>
+                      {![
+                        "Pembukaan Pembelajaran",
+                        "Kegiatan Inti",
+                        "Asesmen dan Penutup",
+                        "Pemanfaatan Teknologi Informasi",
+                      ].includes(q.aspek) && (
+                        <option value={q.aspek}>{q.aspek}</option>
+                      )}
                     </select>
                   </div>
 

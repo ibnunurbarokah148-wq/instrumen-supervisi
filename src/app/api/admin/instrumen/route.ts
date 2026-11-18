@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateQuestionsWithAI } from "@/lib/ai-evaluator";
 import { logActivity } from "@/lib/settings";
+import { ensureSeeded } from "@/lib/seed-data";
 
 const PertanyaanSchema = z.object({
   id: z.string().optional(),
@@ -26,6 +27,8 @@ const CreateInstrumenSchema = z.object({
 export async function GET() {
   const { error } = await requireAdmin();
   if (error) return error;
+
+  await ensureSeeded(false);
 
   const instrumenList = await prisma.instrumen.findMany({
     include: {
@@ -55,9 +58,9 @@ export async function POST(req: NextRequest) {
       await logActivity({
         userId: session.userId,
         namaUser: session.nama,
-        role: "admin",
+        role: session.role,
         aksi: "AI_GENERATE_PERTANYAAN",
-        detail: `Sensei-AI menyusun ${questions.length} saran pertanyaan untuk topik "${topik}"`,
+        detail: `Asisten AI SIPENA menyusun ${questions.length} saran indikator untuk topik "${topik}"`,
       });
       return NextResponse.json({ success: true, questions });
     }

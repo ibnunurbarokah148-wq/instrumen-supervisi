@@ -18,7 +18,6 @@ export async function GET(
   const { id } = await context.params;
   const format = (req.nextUrl.searchParams.get("format") || "pdf").toLowerCase();
 
-  // Cari berdasarkan hasil.id atau hasil.penugasanId
   const hasil = await prisma.hasil.findFirst({
     where: {
       OR: [{ id }, { penugasanId: id }],
@@ -40,13 +39,12 @@ export async function GET(
     );
   }
 
-  // Aturan wajib PRD Bagian 9: Guru hanya bisa export hasil miliknya sendiri
-  if (
-    session.role === "guru" &&
-    hasil.penugasan.guruId !== session.userId
-  ) {
+  if (session.role === "guru" && hasil.penugasan.guruId !== session.userId) {
     return NextResponse.json(
-      { error: "Akses ditolak (403): Anda hanya diizinkan mengunduh dokumen hasil milik sendiri." },
+      {
+        error:
+          "Akses ditolak (403): Anda hanya diizinkan mengunduh dokumen hasil milik sendiri.",
+      },
       { status: 403 }
     );
   }
@@ -86,6 +84,19 @@ export async function GET(
     skorPerAspek,
     catatanAdmin: hasil.catatanAdmin,
     diubahAdminOleh: hasil.diubahAdminOleh,
+    disahkan: hasil.disahkan,
+    disahkanOleh: hasil.disahkanOleh,
+    disahkanNip: hasil.disahkanNip,
+    disahkanPada: hasil.disahkanPada
+      ? new Date(hasil.disahkanPada).toLocaleDateString("id-ID")
+      : null,
+    nomorRegistrasi: hasil.nomorRegistrasi,
+    rtlRekomendasi: hasil.rtlRekomendasi,
+    rtlTarget: hasil.rtlTarget,
+    rtlTenggat: hasil.rtlTenggat,
+    rtlProgres: hasil.rtlProgres,
+    pengawasNama: hasil.pengawasNama,
+    pengawasNip: hasil.pengawasNip,
   };
 
   const safeGuruName = exportData.namaGuru

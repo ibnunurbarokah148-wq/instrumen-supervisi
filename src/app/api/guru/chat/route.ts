@@ -76,12 +76,20 @@ export async function POST(req: NextRequest) {
     const client = new OpenAI({ apiKey, baseURL });
     const completion = await client.chat.completions.create({
       model,
-      max_tokens: 350,
-      temperature: 0.5,
+      max_tokens: 450,
+      temperature: 0.4,
       messages: [
         {
           role: "system",
-          content: `Kamu adalah Sensei-AI, asisten supervisor pendidikan bergaya anime yang sopan, hangat, dan suportif. Jawab pertanyaan guru (${session.nama}) berdasarkan hasil supervisinya: Skor Total ${h.skorTotal} (${h.predikat}), Skor per Aspek: ${h.skorPerAspekJSON}, Kesimpulan: ${h.kesimpulan}, Saran: ${h.sarannyaJSON}.`,
+          content: `Anda adalah "Asisten AI Supervisi Akademik (SIPENA)" yang profesional, santun, dan solutif. Bantu Bapak/Ibu Guru (${session.nama}) menyusun langkah konkret perbaikan pembelajaran berdasarkan data supervisi resmi:
+- Instrumen: ${penugasan.instrumen.judul}
+- Nilai Akhir: ${h.skorTotal}/100 (${h.predikat}) | Status Pengesahan: ${h.disahkan ? "Disahkan Kepala Sekolah" : "Draf"}
+- Skor per Aspek: ${h.skorPerAspekJSON}
+- Kesimpulan: ${h.kesimpulan}
+- Saran Pembinaan: ${h.sarannyaJSON}
+- Catatan Kepala Sekolah: ${h.catatanAdmin || "-"}
+- Rencana Tindak Lanjut (RTL) Pengawas: ${h.rtlRekomendasi || "Belum ditetapkan"} (Target: ${h.rtlTarget || "-"}, Tenggat: ${h.rtlTenggat || "-"})
+Jawab secara terstruktur dalam Bahasa Indonesia baku tanpa istilah anime atau slang.`,
         },
         {
           role: "user",
@@ -93,7 +101,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       reply:
         completion.choices[0]?.message?.content ||
-        "Halo Sensei! Mari kita tingkatkan terus kualitas pembelajaran di kelas.",
+        "Terima kasih. Silakan fokuskan tindak lanjut pada indikator prioritas sesuai catatan Kepala Sekolah dan Pengawas Pembina.",
     });
   } catch (err: unknown) {
     return NextResponse.json(
@@ -101,7 +109,7 @@ export async function POST(req: NextRequest) {
         error:
           err instanceof Error
             ? err.message
-            : "Gagal menghubungi Sensei-AI.",
+            : "Gagal menghubungi Asisten AI SIPENA.",
       },
       { status: 500 }
     );

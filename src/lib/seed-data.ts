@@ -1,24 +1,54 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
-import { buildTranscriptSegments } from "@/lib/ai-evaluator";
+
+const SKALA_RUBRIK = [
+  "1 - Kurang: indikator tidak terlaksana atau belum ada bukti pendukung",
+  "2 - Cukup: indikator terlaksana sebagian atau belum konsisten",
+  "3 - Baik: indikator terlaksana sesuai standar dengan sedikit catatan penguatan",
+  "4 - Amat Baik: indikator terlaksana seluruhnya, konsisten, inovatif, dan terdokumentasi rapi",
+];
 
 export async function ensureSeeded(forceReset: boolean = false) {
   if (!forceReset) {
-    const userCount = await prisma.user.count();
-    if (userCount > 0) return { seeded: false };
-  } else {
-    await prisma.podcast.deleteMany();
-    await prisma.hasil.deleteMany();
-    await prisma.jawaban.deleteMany();
-    await prisma.penugasan.deleteMany();
-    await prisma.pertanyaan.deleteMany();
-    await prisma.instrumen.deleteMany();
-    await prisma.logAktivitas.deleteMany();
-    await prisma.user.deleteMany();
+    const [userCount, kepsekCount, pengawasCount, perangkatCount] =
+      await Promise.all([
+        prisma.user.count(),
+        prisma.user.count({ where: { role: "kepala_sekolah" } }),
+        prisma.user.count({ where: { role: "pengawas" } }),
+        prisma.perangkatSupervisi.count(),
+      ]);
+
+    // Jika sudah ada 4 role SIPENA dan perangkat sudah ada, tidak perlu re-seed
+    if (
+      userCount > 0 &&
+      kepsekCount > 0 &&
+      pengawasCount > 0 &&
+      perangkatCount > 0
+    ) {
+      return { seeded: false };
+    }
   }
 
-  // 1. Seed Pengaturan Default
+  await prisma.perangkatSupervisi.deleteMany();
+  await prisma.hasil.deleteMany();
+  await prisma.jawaban.deleteMany();
+  await prisma.penugasan.deleteMany();
+  await prisma.pertanyaan.deleteMany();
+  await prisma.instrumen.deleteMany();
+  await prisma.logAktivitas.deleteMany();
+  await prisma.user.deleteMany();
+
+  // Bersihkan pengaturan lama (Fish Audio / Podcast) & isi pengaturan SIPENA default
+  await prisma.pengaturan.deleteMany({
+    where: {
+      OR: [
+        { key: { startsWith: "fish_" } },
+        { key: "podcast_template_json" },
+      ],
+    },
+  });
+
   for (const [key, val] of Object.entries(DEFAULT_SETTINGS)) {
     const existing = await prisma.pengaturan.findUnique({ where: { key } });
     if (!existing) {
@@ -36,201 +66,314 @@ export async function ensureSeeded(forceReset: boolean = false) {
     process.env.ADMIN_DEFAULT_PASSWORD || "admin123",
     10
   );
-  const guruPass = await bcrypt.hash("guru123", 10);
+  const demoPass = await bcrypt.hash("guru123", 10);
 
-  // 2. Buat Akun Admin
+  // 1. Admin Sistem
   const admin = await prisma.user.create({
     data: {
-      nama: "Sensei Administrator",
+      nama: "Administrator Sistem SIPENA",
       email: process.env.ADMIN_DEFAULT_EMAIL || "admin@sekolah.sch.id",
       nip: "198501012010011001",
       passwordHash: adminPass,
       role: "admin",
+      jabatan: "Operator & Administrator Sekolah",
+      unitKerja: "SDN 01 Menteng",
       nomorWA: "6281200000001",
-      mapel: "Manajemen Mutu & Supervisi",
+      mapel: "Tata Usaha & Manajemen Sistem",
       aktif: true,
       lastLoginAt: new Date(),
     },
   });
 
-  // 3. Buat 4 Akun Guru Contoh
+  // 2. Kepala Sekolah (Supervisor Penilai & Pengesah Laporan)
+  const kepsek = await prisma.user.create({
+    data: {
+      nama: "Dr. Hj. Ratna Kusuma, M.Pd.",
+      email: "kepsek@sekolah.sch.id",
+      nip: "197204151998022001",
+      passwordHash: adminPass,
+      role: "kepala_sekolah",
+      jabatan: "Kepala Sekolah / Supervisor Utama",
+      unitKerja: "SDN 01 Menteng",
+      nomorWA: "6281200000002",
+      mapel: "Manajemen Supervisi Akademik",
+      aktif: true,
+      lastLoginAt: new Date(),
+    },
+  });
+
+  // 3. Pengawas Sekolah Pembina (Peninjau Akhir & Pemberi RTL)
+  const pengawas = await prisma.user.create({
+    data: {
+      nama: "Drs. H. Bambang Sudibyo, M.Pd.",
+      email: "pengawas@sekolah.sch.id",
+      nip: "196805121993031004",
+      passwordHash: adminPass,
+      role: "pengawas",
+      jabatan: "Pengawas Sekolah Pembina",
+      unitKerja: "Dinas Pendidikan Wilayah I",
+      nomorWA: "6281200000003",
+      mapel: "Pembinaan Mutu & Tindak Lanjut",
+      aktif: true,
+      lastLoginAt: new Date(),
+    },
+  });
+
+  // 4. Empat Akun Guru dengan beragam tahap workflow SIPENA
   const guru1 = await prisma.user.create({
     data: {
-      nama: "Aulia Rahmawati, S.Pd., Gr.",
-      email: "aulia@sekolah.sch.id",
-      nip: "199203142019032008",
-      passwordHash: guruPass,
+      nama: "Budi Santoso, S.Pd., M.Pd.",
+      email: "budi@sekolah.sch.id",
+      nip: "198803142014031002",
+      passwordHash: demoPass,
       role: "guru",
-      nomorWA: "6281234567801",
-      mapel: "Informatika & Pemrograman Web",
+      jabatan: "Guru Madya",
+      unitKerja: "SDN 01 Menteng",
+      nomorWA: "6281234567890",
+      mapel: "Matematika",
       aktif: true,
-      lastLoginAt: new Date(Date.now() - 1000 * 60 * 35),
-      badgesJSON: JSON.stringify([
-        "Supervisi Pertama Selesai 🌸",
-        "Sensei Teladan (Sangat Baik) 🌟",
-        "Disiplin Tepat Waktu ⚡",
-      ]),
+      lastLoginAt: new Date(Date.now() - 1000 * 60 * 25),
     },
   });
 
   const guru2 = await prisma.user.create({
     data: {
-      nama: "Rizky Pratama Putra, M.Pd.",
-      email: "rizky@sekolah.sch.id",
-      nip: "199007212018011004",
-      passwordHash: guruPass,
+      nama: "Siti Aminah, S.Pd.",
+      email: "siti@sekolah.sch.id",
+      nip: "199107212018012004",
+      passwordHash: demoPass,
       role: "guru",
-      nomorWA: "6281234567802",
-      mapel: "Matematika Lanjut",
+      jabatan: "Guru Muda",
+      unitKerja: "SDN 01 Menteng",
+      nomorWA: "6281298765432",
+      mapel: "Bahasa Indonesia",
       aktif: true,
-      lastLoginAt: new Date(Date.now() - 1000 * 60 * 60 * 5),
-      badgesJSON: JSON.stringify([
-        "Supervisi Pertama Selesai 🌸",
-        "Disiplin Tepat Waktu ⚡",
-      ]),
+      lastLoginAt: new Date(Date.now() - 1000 * 60 * 60 * 3),
     },
   });
 
   const guru3 = await prisma.user.create({
     data: {
-      nama: "Nadia Kusuma Dewi, S.Pd.",
-      email: "nadia@sekolah.sch.id",
-      nip: "199511092020122011",
-      passwordHash: guruPass,
+      nama: "Ahmad Fauzi, S.Kom.",
+      email: "ahmad@sekolah.sch.id",
+      nip: "199411092020121011",
+      passwordHash: demoPass,
       role: "guru",
-      nomorWA: "6281234567803",
-      mapel: "Bahasa Jepang & Sastra",
+      jabatan: "Guru Pertama",
+      unitKerja: "SDN 01 Menteng",
+      nomorWA: "6281311223344",
+      mapel: "Informatika & Koding",
       aktif: true,
-      lastLoginAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
-      badgesJSON: JSON.stringify(["Supervisi Pertama Selesai 🌸"]),
+      lastLoginAt: new Date(Date.now() - 1000 * 60 * 60 * 12),
     },
   });
 
   const guru4 = await prisma.user.create({
     data: {
-      nama: "Bagas Adi Nugroho, S.Si.",
-      email: "bagas@sekolah.sch.id",
-      nip: "199305182019031006",
-      passwordHash: guruPass,
+      nama: "Dewi Lestari, S.Pd.",
+      email: "dewi@sekolah.sch.id",
+      nip: "199305182019032006",
+      passwordHash: demoPass,
       role: "guru",
-      nomorWA: "6281234567804",
-      mapel: "Fisika Eksperimen",
+      jabatan: "Guru Pertama",
+      unitKerja: "SDN 01 Menteng",
+      nomorWA: "6281355667788",
+      mapel: "IPAS & Sains Terpadu",
       aktif: true,
-      lastLoginAt: new Date(Date.now() - 1000 * 60 * 60 * 48),
-      badgesJSON: JSON.stringify(["Supervisi Pertama Selesai 🌸"]),
+      lastLoginAt: new Date(Date.now() - 1000 * 60 * 60 * 36),
     },
   });
 
-  // 4. Buat Instrumen 1: Supervisi Akademik Semester Ganjil (Aktif)
+  // 5. Instrumen 1: 20 Indikator Standar Kurikulum Merdeka (4 Aspek)
   const instrumen1 = await prisma.instrumen.create({
     data: {
-      judul: "Instrumen Supervisi Akademik & Pembelajaran Digital 2026",
+      judul:
+        "Instrumen Supervisi Akademik Standar Proses (Kurikulum Merdeka)",
       deskripsi:
-        "Evaluasi komprehensif kesiapan perencanaan modul ajar, pelaksanaan pembelajaran berpusat pada siswa, asesmen autentik, dan integrasi teknologi informasi (IT).",
+        "Instrumen observasi pembelajaran terstandar Permendikbudristek No. 16 Tahun 2022 mencakup 4 aspek: Pembukaan Pembelajaran, Kegiatan Inti Berdiferensiasi, Asesmen & Penutup, serta Pemanfaatan TIK.",
       versi: 1,
       status: "aktif",
       pertanyaan: {
         create: [
           {
             urutan: 1,
-            aspek: "Perencanaan",
+            aspek: "Pembukaan Pembelajaran",
             tipe: "skala",
-            bobot: 1.5,
+            bobot: 1.0,
             wajib: true,
-            teks: "Kelengkapan Modul Ajar / RPP yang memuat tujuan pembelajaran terukur, langkah kegiatan diferensiasi, dan profil pelajar.",
-            opsiJSON: JSON.stringify([
-              "1 - Belum Tersedia",
-              "2 - Kurang Lengkap",
-              "3 - Cukup Lengkap",
-              "4 - Lengkap & Rapi",
-              "5 - Sangat Lengkap, Kontekstual & Inovatif",
-            ]),
+            teks: "Guru membuka pembelajaran dengan salam, doa, serta memeriksa kesiapan fisik dan psikis peserta didik.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
           },
           {
             urutan: 2,
-            aspek: "Perencanaan",
-            tipe: "ya_tidak",
+            aspek: "Pembukaan Pembelajaran",
+            tipe: "skala",
             bobot: 1.0,
             wajib: true,
-            teks: "Apakah Anda telah menyiapkan bahan ajar digital/lembar kerja (LKPD) sebelum jam pelajaran dimulai?",
-            opsiJSON: JSON.stringify(["Ya", "Tidak"]),
+            teks: "Guru melakukan apersepsi kontekstual dan memberikan pertanyaan pemantik sesuai pengalaman siswa.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
           },
           {
             urutan: 3,
-            aspek: "Pelaksanaan",
+            aspek: "Pembukaan Pembelajaran",
             tipe: "skala",
-            bobot: 1.5,
+            bobot: 1.0,
             wajib: true,
-            teks: "Kemampuan memantik rasa ingin tahu siswa melalui apersepsi kontekstual dan pertanyaan pemantik di awal kelas.",
-            opsiJSON: JSON.stringify([
-              "1 - Tidak Dilakukan",
-              "2 - Kurang Menarik",
-              "3 - Cukup Menarik",
-              "4 - Menarik & Interaktif",
-              "5 - Sangat Inspiratif & Antusias",
-            ]),
+            teks: "Guru menyampaikan tujuan pembelajaran, lingkup materi, dan rencana asesmen secara eksplisit.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
           },
           {
             urutan: 4,
-            aspek: "Pelaksanaan",
-            tipe: "pilihan_ganda",
-            bobot: 1.3,
+            aspek: "Pembukaan Pembelajaran",
+            tipe: "skala",
+            bobot: 1.0,
             wajib: true,
-            teks: "Model interaksi pembelajaran apa yang paling dominan Anda terapkan selama kegiatan inti berlangsung?",
-            opsiJSON: JSON.stringify([
-              "Project/Problem-Based Learning kolaboratif dengan diskusi aktif kelompok",
-              "Diskusi terarah disertai tanya jawab dan demonstrasi",
-              "Ceramah interaktif dengan latihan soal mandiri",
-              "Ceramah satu arah dan pencatatan materi",
-            ]),
+            teks: "Pelaksanaan skenario awal pembelajaran selaras dengan Modul Ajar/RPP yang telah diverifikasi.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
           },
           {
             urutan: 5,
-            aspek: "Penguasaan IT",
+            aspek: "Kegiatan Inti",
             tipe: "skala",
-            bobot: 1.5,
+            bobot: 1.0,
             wajib: true,
-            teks: "Pemanfaatan media pembelajaran berbasis IT (LMS, simulasi interaktif, kuis digital, atau AI edukasi) secara efektif di kelas.",
-            opsiJSON: JSON.stringify([
-              "1 - Tidak Menggunakan IT",
-              "2 - Hanya Slide Teks Statis",
-              "3 - Multimedia & Video",
-              "4 - Kuis Digital & LMS Aktif",
-              "5 - Ekosistem IT Interaktif, Simulasi & Adaptif",
-            ]),
+            teks: "Guru menguasai materi secara mendalam, terstruktur, dan bebas dari miskonsepsi keilmuan.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
           },
           {
             urutan: 6,
-            aspek: "Penguasaan IT",
-            tipe: "isian_singkat",
-            bobot: 1.0,
+            aspek: "Kegiatan Inti",
+            tipe: "skala",
+            bobot: 1.2,
             wajib: true,
-            teks: "Sebutkan aplikasi/platform teknologi utama yang Anda gunakan dalam pembelajaran minggu ini!",
-            opsiJSON: JSON.stringify([]),
+            teks: "Guru menerapkan pembelajaran berdiferensiasi (konten, proses, atau produk) sesuai kesiapan belajar siswa.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
           },
           {
             urutan: 7,
-            aspek: "Evaluasi",
+            aspek: "Kegiatan Inti",
             tipe: "skala",
-            bobot: 1.4,
+            bobot: 1.2,
             wajib: true,
-            teks: "Pelaksanaan asesmen formatif dan pemberian umpan balik (feedback) konstruktif secara berkala kepada siswa.",
-            opsiJSON: JSON.stringify([
-              "1 - Belum Ada Asesmen",
-              "2 - Jarang Diberi Umpan Balik",
-              "3 - Cukup Berkala",
-              "4 - Terstruktur & Jelas",
-              "5 - Real-time, Personal & Menindaklanjuti Remedial/Pengayaan",
-            ]),
+            teks: "Guru menggunakan model aktif (PBL, PjBL, Inkuiri) yang mendorong kolaborasi & berpikir kritis.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
           },
           {
             urutan: 8,
-            aspek: "Evaluasi",
-            tipe: "esai",
-            bobot: 1.5,
+            aspek: "Kegiatan Inti",
+            tipe: "skala",
+            bobot: 1.0,
             wajib: true,
-            teks: "Ceritakan refleksi singkat Anda mengenai keberhasilan utama di kelas serta rencana perbaikan untuk pertemuan berikutnya!",
-            opsiJSON: JSON.stringify([]),
+            teks: "Guru memanfaatkan LKPD dan sumber belajar kontekstual yang relevan dengan capaian fase.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
+          },
+          {
+            urutan: 9,
+            aspek: "Kegiatan Inti",
+            tipe: "skala",
+            bobot: 1.0,
+            wajib: true,
+            teks: "Guru mengajukan pertanyaan terbuka tingkat tinggi (HOTS) dan memberi kesempatan merata.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
+          },
+          {
+            urutan: 10,
+            aspek: "Kegiatan Inti",
+            tipe: "skala",
+            bobot: 1.0,
+            wajib: true,
+            teks: "Guru mengintegrasikan penguatan Profil Pelajar Pancasila dalam aktivitas pembelajaran.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
+          },
+          {
+            urutan: 11,
+            aspek: "Kegiatan Inti",
+            tipe: "skala",
+            bobot: 1.0,
+            wajib: true,
+            teks: "Guru mengelola waktu, dinamika kelompok, dan iklim kelas agar tetap kondusif dan aman.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
+          },
+          {
+            urutan: 12,
+            aspek: "Kegiatan Inti",
+            tipe: "skala",
+            bobot: 1.0,
+            wajib: true,
+            teks: "Interaksi guru dan peserta didik bersifat dialogis, empatik, dan menghargai keragaman pendapat.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
+          },
+          {
+            urutan: 13,
+            aspek: "Asesmen dan Penutup",
+            tipe: "skala",
+            bobot: 1.2,
+            wajib: true,
+            teks: "Guru melaksanakan asesmen formatif selama proses belajar (observasi, kuis, atau penilaian kinerja).",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
+          },
+          {
+            urutan: 14,
+            aspek: "Asesmen dan Penutup",
+            tipe: "skala",
+            bobot: 1.0,
+            wajib: true,
+            teks: "Guru memberikan umpan balik konstruktif dan spesifik terhadap hasil kerja peserta didik.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
+          },
+          {
+            urutan: 15,
+            aspek: "Asesmen dan Penutup",
+            tipe: "skala",
+            bobot: 1.0,
+            wajib: true,
+            teks: "Guru bersama peserta didik melakukan refleksi dan menyimpulkan poin kunci pembelajaran.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
+          },
+          {
+            urutan: 16,
+            aspek: "Asesmen dan Penutup",
+            tipe: "skala",
+            bobot: 1.0,
+            wajib: true,
+            teks: "Guru menyampaikan rencana tindak lanjut berupa pengayaan atau remedial untuk pertemuan berikutnya.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
+          },
+          {
+            urutan: 17,
+            aspek: "Pemanfaatan Teknologi Informasi",
+            tipe: "skala",
+            bobot: 1.2,
+            wajib: true,
+            teks: "Guru mengoperasikan perangkat TIK (proyektor, laptop, panel interaktif) secara lancar di kelas.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
+          },
+          {
+            urutan: 18,
+            aspek: "Pemanfaatan Teknologi Informasi",
+            tipe: "skala",
+            bobot: 1.2,
+            wajib: true,
+            teks: "Guru menggunakan media digital interaktif (Quizizz, GeoGebra, PhET, atau Canva Edu) sesuai topik.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
+          },
+          {
+            urutan: 19,
+            aspek: "Pemanfaatan Teknologi Informasi",
+            tipe: "skala",
+            bobot: 1.0,
+            wajib: true,
+            teks: "Guru mengarahkan literasi digital serta keamanan penggunaan internet peserta didik secara bertanggung jawab.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
+          },
+          {
+            urutan: 20,
+            aspek: "Pemanfaatan Teknologi Informasi",
+            tipe: "skala",
+            bobot: 1.2,
+            wajib: true,
+            teks: "Guru memanfaatkan LMS / Platform Merdeka Mengajar (PMM) untuk distribusi tugas & pengembangan kompetensi.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
           },
         ],
       },
@@ -238,55 +381,50 @@ export async function ensureSeeded(forceReset: boolean = false) {
     include: { pertanyaan: { orderBy: { urutan: "asc" } } },
   });
 
-  // 5. Buat Instrumen 2: Supervisi Klinis & Inovasi Media IT
+  // 6. Instrumen 2: Supervisi Klinis & Observasi Singkat (4 Aspek)
   const instrumen2 = await prisma.instrumen.create({
     data: {
-      judul: "Instrumen Supervisi Inovasi Media & Kelas Kolaboratif",
+      judul: "Instrumen Observasi Klinis & Refleksi Pembelajaran Digital",
       deskripsi:
-        "Instrumen evaluasi berkala untuk memantau kreativitas bahan ajar interaktif, manajemen kelas kolaboratif, dan refleksi pasca-mengajar.",
+        "Instrumen ringkas 4 aspek untuk supervisi klinis berkala yang memadukan evaluasi diri guru, catatan keterlaksanaan kelas, dan penilaian Kepala Sekolah.",
       versi: 1,
       status: "aktif",
       pertanyaan: {
         create: [
           {
             urutan: 1,
-            aspek: "Perencanaan",
+            aspek: "Pembukaan Pembelajaran",
             tipe: "skala",
             bobot: 1.2,
             wajib: true,
-            teks: "Kesesuaian pemilihan media interaktif dengan karakteristik gaya belajar siswa (visual, auditori, kinestetik).",
-            opsiJSON: JSON.stringify(["1", "2", "3", "4", "5"]),
+            teks: "Kesiapan modul ajar, apersepsi kontekstual, dan penyampaian tujuan pembelajaran kepada siswa.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
           },
           {
             urutan: 2,
-            aspek: "Pelaksanaan",
+            aspek: "Kegiatan Inti",
             tipe: "skala",
             bobot: 1.5,
             wajib: true,
-            teks: "Pengelolaan manajemen waktu dan antusiasme diskusi siswa selama kerja kelompok.",
-            opsiJSON: JSON.stringify(["1", "2", "3", "4", "5"]),
+            teks: "Penerapan pembelajaran berdiferensiasi dan keaktifan kolaborasi peserta didik dalam diskusi.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
           },
           {
             urutan: 3,
-            aspek: "Penguasaan IT",
-            tipe: "pilihan_ganda",
+            aspek: "Asesmen dan Penutup",
+            tipe: "skala",
             bobot: 1.3,
             wajib: true,
-            teks: "Bagaimana cara siswa mengumpulkan dan mempresentasikan karya/tugas di kelas Anda?",
-            opsiJSON: JSON.stringify([
-              "Portofolio digital terintegrasi & showcase interaktif di kelas",
-              "Pengumpulan via Google Classroom / LMS sekolah",
-              "Pengumpulan file lewat grup pesan",
-              "Pengumpulan kertas manual",
-            ]),
+            teks: "Pelaksanaan asesmen formatif, umpan balik langsung, serta refleksi penutup bersama peserta didik.",
+            opsiJSON: JSON.stringify(SKALA_RUBRIK),
           },
           {
             urutan: 4,
-            aspek: "Evaluasi",
+            aspek: "Pemanfaatan Teknologi Informasi",
             tipe: "esai",
             bobot: 1.5,
             wajib: true,
-            teks: "Tuliskan inovasi asesmen yang ingin Anda uji cobakan pada bulan depan beserta target peningkatannya.",
+            teks: "Deskripsikan pemanfaatan perangkat TIK/platform digital di kelas beserta kendala dan rencana perbaikan.",
             opsiJSON: JSON.stringify([]),
           },
         ],
@@ -295,334 +433,543 @@ export async function ensureSeeded(forceReset: boolean = false) {
     include: { pertanyaan: { orderBy: { urutan: "asc" } } },
   });
 
-  // Helper untuk membuat hasil supervisi contoh
-  async function createCompletedSupervisi(opts: {
+  // Helper seed penugasan lengkap dengan tahapan SIPENA
+  async function seedSupervisiRecord(opts: {
     guru: typeof guru1;
     instrumen: typeof instrumen1;
     daysAgo: number;
-    skorAspek: { aspek: string; skor: number; alasan: string }[];
-    skorTotal: number;
-    predikat: string;
-    kesimpulan: string;
-    kekuatan: string[];
-    saran: string[];
-    naskahPodcast: string;
+    statusPenugasan:
+      | "tindak_lanjut"
+      | "selesai"
+      | "dalam_penilaian"
+      | "perlu_revisi"
+      | "menunggu_verifikasi"
+      | "belum";
+    catatanVerifikasi?: string;
+    skorAspek?: { aspek: string; skor: number; alasan: string }[];
+    skorTotal?: number;
+    predikat?: string;
+    kesimpulan?: string;
+    kekuatan?: string[];
+    saran?: string[];
     catatanAdmin?: string;
-    sampleAnswers: Record<number, unknown>;
+    disahkan?: boolean;
+    nomorRegistrasi?: string;
+    rtl?: {
+      rekomendasi: string;
+      target: string;
+      tenggat: string;
+      progres: string;
+    };
+    sampleAnswers: Record<
+      number,
+      { nilai: number | string; catatan: string; buktiUrl?: string }
+    >;
   }) {
-    const createdAt = new Date(Date.now() - opts.daysAgo * 24 * 60 * 60 * 1000);
-    const tenggat = new Date(createdAt.getTime() + 5 * 24 * 60 * 60 * 1000);
+    const createdAt = new Date(
+      Date.now() - opts.daysAgo * 24 * 60 * 60 * 1000
+    );
+    const tenggat = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     const penugasan = await prisma.penugasan.create({
       data: {
         instrumenId: opts.instrumen.id,
         guruId: opts.guru.id,
         tenggat,
-        status: "selesai",
+        status: opts.statusPenugasan,
+        catatanVerifikasi: opts.catatanVerifikasi || null,
+        diverifikasiOleh:
+          opts.statusPenugasan !== "belum" &&
+          opts.statusPenugasan !== "menunggu_verifikasi"
+            ? kepsek.nama
+            : null,
+        diverifikasiPada:
+          opts.statusPenugasan !== "belum" &&
+          opts.statusPenugasan !== "menunggu_verifikasi"
+            ? createdAt
+            : null,
         createdAt,
         updatedAt: createdAt,
       },
     });
 
     for (const q of opts.instrumen.pertanyaan) {
-      const val = opts.sampleAnswers[q.urutan] ?? (q.tipe === "skala" ? 5 : "Ya");
+      const ans = opts.sampleAnswers[q.urutan];
+      if (!ans && opts.statusPenugasan === "belum") continue;
+      const fallback = {
+        nilai: q.tipe === "skala" ? 3 : "Terlaksana baik sesuai modul ajar.",
+        catatan:
+          "Bukti pelaksanaan terdokumentasi di jurnal mengajar & LKPD kelas.",
+      };
       await prisma.jawaban.create({
         data: {
           penugasanId: penugasan.id,
           pertanyaanId: q.id,
-          nilaiJSON: JSON.stringify(val),
+          nilaiJSON: JSON.stringify(ans || fallback),
         },
       });
     }
 
-    const hasil = await prisma.hasil.create({
-      data: {
-        penugasanId: penugasan.id,
-        skorPerAspekJSON: JSON.stringify(opts.skorAspek),
-        skorTotal: opts.skorTotal,
-        skorAsliAI: opts.skorTotal,
-        predikat: opts.predikat,
-        kesimpulan: opts.kesimpulan,
-        kekuatanJSON: JSON.stringify(opts.kekuatan),
-        sarannyaJSON: JSON.stringify(opts.saran),
-        catatanAdmin: opts.catatanAdmin || null,
-        diubahAdminOleh: opts.catatanAdmin ? "Sensei Administrator" : null,
-        diubahAdminPada: opts.catatanAdmin ? createdAt : null,
-        status: "selesai",
-        tokenUsage: 640,
-        createdAt,
-        updatedAt: createdAt,
-      },
-    });
-
-    const { segments, totalDuration } = buildTranscriptSegments(
-      opts.naskahPodcast,
-      1.0
-    );
-    await prisma.podcast.create({
-      data: {
-        hasilId: hasil.id,
-        naskah: opts.naskahPodcast,
-        transkripSegmenJSON: JSON.stringify(segments),
-        durasi: totalDuration,
-        karakterTts: opts.naskahPodcast.length,
-        status: "gagal",
-        errorMessage:
-          "Audio belum digenerate via Fish Audio. Silakan isi API Key Fish Audio & Reference Voice ID di Panel Admin, lalu klik tombol Generate via Fish Audio.",
-        createdAt,
-        updatedAt: createdAt,
-      },
-    });
+    if (opts.skorAspek && opts.skorTotal !== undefined) {
+      await prisma.hasil.create({
+        data: {
+          penugasanId: penugasan.id,
+          skorPerAspekJSON: JSON.stringify(opts.skorAspek),
+          skorTotal: opts.skorTotal,
+          skorAsliAI: opts.skorTotal,
+          predikat: opts.predikat || "Baik",
+          kesimpulan: opts.kesimpulan || "",
+          kekuatanJSON: JSON.stringify(opts.kekuatan || []),
+          sarannyaJSON: JSON.stringify(opts.saran || []),
+          catatanAdmin: opts.catatanAdmin || null,
+          diubahAdminOleh: opts.disahkan ? kepsek.nama : null,
+          diubahAdminPada: opts.disahkan ? createdAt : null,
+          disahkan: Boolean(opts.disahkan),
+          disahkanOleh: opts.disahkan ? kepsek.nama : null,
+          disahkanNip: opts.disahkan ? kepsek.nip : null,
+          disahkanPada: opts.disahkan ? createdAt : null,
+          nomorRegistrasi: opts.nomorRegistrasi || null,
+          rtlRekomendasi: opts.rtl?.rekomendasi || null,
+          rtlTarget: opts.rtl?.target || null,
+          rtlTenggat: opts.rtl?.tenggat || null,
+          rtlProgres: opts.rtl?.progres || "Belum Dimulai",
+          pengawasNama: opts.rtl ? pengawas.nama : null,
+          pengawasNip: opts.rtl ? pengawas.nip : null,
+          ditinjauPengawasPada: opts.rtl ? new Date() : null,
+          status: "selesai",
+          tokenUsage: 580,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      });
+    }
   }
 
-  // 6. Seed Riwayat & Hasil Supervisi Guru 1 (Aulia) - 2 periode + 1 tugas baru siap diisi
-  await createCompletedSupervisi({
-    guru: guru1,
-    instrumen: instrumen2,
-    daysAgo: 21,
-    skorTotal: 84,
-    predikat: "Baik",
-    skorAspek: [
-      {
-        aspek: "Perencanaan",
-        skor: 85,
-        alasan: "Pemetaan gaya belajar visual dan kinestetik siswa sudah tertuang rapi dalam rencana kegiatan.",
-      },
-      {
-        aspek: "Pelaksanaan",
-        skor: 82,
-        alasan: "Diskusi kelompok berjalan kondusif, alokasi waktu presentasi akhir dapat diperketat.",
-      },
-      {
-        aspek: "Penguasaan IT",
-        skor: 88,
-        alasan: "Penggunaan LMS dan repositori kode interaktif sangat membantu siswa.",
-      },
-      {
-        aspek: "Evaluasi",
-        skor: 81,
-        alasan: "Rencana asesmen proyek sudah jelas dan terukur.",
-      },
-    ],
-    kesimpulan:
-      "Otsukare-sama desu, Aulia-sensei! Pada periode supervisi awal ini, Sensei memperoleh skor 84 (Baik). Penguasaan media IT sudah menonjol dan siap ditingkatkan menuju kolaborasi proyek yang lebih terintegrasi.",
-    kekuatan: [
-      "Pemanfaatan platform digital yang familier bagi siswa.",
-      "Perencanaan diferensiasi media visual dan praktik langsung.",
-    ],
-    saran: [
-      "Tambahkan rubrik penilaian sebaya (peer-assessment) saat sesi presentasi kelompok.",
-      "Gunakan timer visual di layar agar transisi diskusi lebih tepat waktu.",
-    ],
-    naskahPodcast: [
-      "Sensei-AI: Ohayou gozaimasu, Aulia-sensei! Selamat datang di rekaman evaluasi supervisi periode pertama bersama Sensei-AI.",
-      "Sensei-AI: Pada instrumen Inovasi Media dan Kelas Kolaboratif ini, Sensei berhasil meraih skor 84 dengan predikat Baik. Aspek Penguasaan IT mencapai skor tertinggi yaitu 88 dari 100!",
-      "Sensei-AI: Untuk langkah peningkatan berikutnya, mari kita tambahkan fitur peer-assessment dan pengaturan waktu presentasi agar diskusi siswa semakin tajam. Ganbatte kudasai, Sensei!",
-    ].join("\n\n"),
-    sampleAnswers: {
-      1: 4,
-      2: 4,
-      3: "Portofolio digital terintegrasi & showcase interaktif di kelas",
-      4: "Menerapkan live coding review dan peer-assessment berbasis rubrik digital agar siswa saling memberi masukan konstruktif.",
-    },
-  });
-
-  await createCompletedSupervisi({
+  // Record 1: Budi Santoso -> Tahap Akhir "tindak_lanjut" (Disahkan Kepsek + Ada RTL Pengawas)
+  await seedSupervisiRecord({
     guru: guru1,
     instrumen: instrumen1,
-    daysAgo: 3,
-    skorTotal: 92,
-    predikat: "Sangat Baik",
+    daysAgo: 10,
+    statusPenugasan: "tindak_lanjut",
+    catatanVerifikasi:
+      "Modul ajar, LKPD berdiferensiasi, dan instrumen asesmen sangat lengkap.",
+    skorTotal: 92.5,
+    predikat: "Amat Baik",
+    disahkan: true,
+    nomorRegistrasi: "REG-SUP/2026/001",
     skorAspek: [
       {
-        aspek: "Perencanaan",
+        aspek: "Pembukaan Pembelajaran",
         skor: 94,
-        alasan: "Modul ajar disusun sangat komprehensif dengan LKPD interaktif yang siap diakses sebelum kelas.",
+        alasan:
+          "Pembukaan kelas tertib, apersepsi mengaitkan fungsi linear dengan tarif ojek daring sangat efektif.",
       },
       {
-        aspek: "Pelaksanaan",
+        aspek: "Kegiatan Inti",
+        skor: 91,
+        alasan:
+          "Pembelajaran berdiferensiasi pada 3 tingkat kesulitan LKPD berjalan kondusif dan aktif.",
+      },
+      {
+        aspek: "Asesmen dan Penutup",
         skor: 90,
-        alasan: "Model Project-Based Learning berhasil memicu kolaborasi aktif dan antusiasme tinggi di kelas Informatika.",
+        alasan:
+          "Asesmen formatif melalui kuis diagnostik singkat diikuti umpan balik individual yang jelas.",
       },
       {
-        aspek: "Penguasaan IT",
-        skor: 96,
-        alasan: "Integrasi sandbox koding interaktif, LMS, dan kuis real-time berjalan sangat mulus.",
-      },
-      {
-        aspek: "Evaluasi",
-        skor: 88,
-        alasan: "Refleksi pembelajaran dan asesmen formatif dilakukan secara real-time dengan tindak lanjut yang jelas.",
+        aspek: "Pemanfaatan Teknologi Informasi",
+        skor: 95,
+        alasan:
+          "Visualisasi grafik dengan GeoGebra Classroom dan LMS membantu siswa memahami konsep abstrak.",
       },
     ],
     kesimpulan:
-      "Subarashii, Aulia-sensei! ✨ Capaian supervisi akademik Sensei meningkat pesat menjadi 92 (Sangat Baik). Integrasi ekosistem pembelajaran berbasis IT dan metode Project-Based Learning yang Sensei terapkan menjadi teladan praktik baik di sekolah.",
+      "Pelaksanaan pembelajaran Matematika oleh Bapak Budi Santoso meraih nilai 92,5 (Amat Baik). Integrasi pembelajaran berdiferensiasi dan simulasi GeoGebra memenuhi standar proses Permendikbudristek No. 16 Tahun 2022 dan layak menjadi praktik baik sekolah.",
     kekuatan: [
-      "Integrasi teknologi pembelajaran interaktif memperoleh skor luar biasa (96/100).",
-      "Perencanaan modul ajar dan LKPD digital sangat rapi serta berpusat pada siswa.",
-      "Refleksi pasca-mengajar sangat tajam dan berorientasi solusi.",
+      "Penerapan pembelajaran berdiferensiasi konten & produk terlaksana konsisten.",
+      "Integrasi GeoGebra interaktif membuat pemahaman grafik fungsi meningkat signifikan.",
+      "Manajemen waktu dan transisi antar fase kegiatan sangat terjaga.",
     ],
     saran: [
-      "Bagikan praktik baik penggunaan sandbox interaktif ini dalam forum komunitas belajar guru (MGMP/Kombel).",
-      "Kembangkan bank studi kasus bertingkat untuk memfasilitasi siswa yang selesai lebih cepat (fast learners).",
+      "Dokumentasikan praktik baik ini dalam sesi berbagi Komunitas Belajar (Kombel) guru.",
+      "Tambahkan instrumen peer-assessment pada akhir presentasi proyek kelompok.",
     ],
     catatanAdmin:
-      "Apresiasi tinggi untuk Ibu Aulia atas peningkatan skor dari 84 ke 92. Mohon kesediaannya menjadi narasumber berbagi praktik baik IT pada rapat dewan guru bulan depan.",
-    naskahPodcast: [
-      "Sensei-AI: Ohayou gozaimasu, Aulia-sensei! Senang sekali rasanya Sensei-AI kembali menyapa Anda di ruang podcast supervisi akademik hari ini.",
-      "Sensei-AI: Hasil evaluasi terbaru Sensei sungguh membanggakan! Sensei meraih skor total 92 dari 100 dengan predikat Sangat Baik, meningkat 8 poin dibandingkan periode sebelumnya.",
-      "Sensei-AI: Keunggulan paling bersinar terlihat pada aspek Penguasaan IT dengan skor 96 dan Perencanaan dengan skor 94. Penggunaan sandbox interaktif dan Project-Based Learning di kelas Informatika berhasil membuat siswa sangat antusias.",
-      "Sensei-AI: Sebagai langkah pengayaan, Sensei-AI menyarankan agar inovasi ini dibagikan kepada rekan-rekan guru lainnya, sembari menyiapkan tantangan ekstra bagi siswa fast-learners. Otsukare-sama desu, teruslah bersinar ya, Aulia-sensei!",
-    ].join("\n\n"),
+      "Disahkan oleh Kepala Sekolah. Apresiasi atas konsistensi penyusunan perangkat ajar dan inovasi pembelajaran Matematika berbasis GeoGebra.",
+    rtl: {
+      rekomendasi:
+        "Guru ditunjuk menjadi narasumber diseminasi praktik baik pembelajaran berdiferensiasi & integrasi GeoGebra pada MGMP / Kombel tingkat kecamatan.",
+      target:
+        "Tersusunnya 1 modul ajar model + video praktik baik berdurasi 10 menit di Platform Merdeka Mengajar (PMM).",
+      tenggat: "30 Desember 2026",
+      progres: "Sedang Berjalan",
+    },
     sampleAnswers: {
-      1: 5,
-      2: "Ya",
-      3: 5,
-      4: "Project/Problem-Based Learning kolaboratif dengan diskusi aktif kelompok",
-      5: 5,
-      6: "Google Classroom, GitHub Classroom, Quizizz Interactive, dan Live Sandbox Web",
-      7: 4,
-      8: "Siswa sangat antusias membangun proyek mini secara berkelompok. Pertemuan berikutnya saya akan menambahkan tantangan bonus bagi kelompok yang selesai lebih cepat.",
-    },
-  });
-
-  // Berikan 1 Penugasan Aktif (Draft) untuk Guru 1 agar bisa langsung diuji coba klik "Isi Instrumen" & "Submit"
-  const activePenugasanGuru1 = await prisma.penugasan.create({
-    data: {
-      instrumenId: instrumen2.id,
-      guruId: guru1.id,
-      tenggat: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      status: "draft",
-    },
-  });
-
-  // Isi sebagian jawaban draft untuk Guru 1
-  if (instrumen2.pertanyaan[0]) {
-    await prisma.jawaban.create({
-      data: {
-        penugasanId: activePenugasanGuru1.id,
-        pertanyaanId: instrumen2.pertanyaan[0].id,
-        nilaiJSON: JSON.stringify(5),
+      1: {
+        nilai: 4,
+        catatan: "Salam, doa, dan cek presensi serta kesiapan belajar dilaksanakan.",
+        buktiUrl: "https://drive.google.com/file/d/bukti-pembukaan-budi",
       },
-    });
-  }
+      6: {
+        nilai: 4,
+        catatan: "LKPD dibagi menjadi level dasar, menengah, dan pengayaan.",
+      },
+      18: {
+        nilai: 4,
+        catatan: "Menggunakan GeoGebra Classroom & proyektor kelas.",
+      },
+    },
+  });
 
-  // 7. Seed Hasil Supervisi Guru 2 (Rizky), Guru 3 (Nadia), Guru 4 (Bagas) untuk Grafik Perbandingan Admin
-  await createCompletedSupervisi({
+  // Record 2: Siti Aminah -> Tahap "selesai" (Disahkan Kepsek, menunggu RTL Pengawas)
+  await seedSupervisiRecord({
     guru: guru2,
     instrumen: instrumen1,
-    daysAgo: 12,
-    skorTotal: 85,
-    predikat: "Sangat Baik",
-    skorAspek: [
-      { aspek: "Perencanaan", skor: 88, alasan: "RPP Matematika Lanjut terstruktur dengan pemetaan soal bertingkat." },
-      { aspek: "Pelaksanaan", skor: 84, alasan: "Penjelasan konsep sangat jernih dan melibatkan siswa di papan interaktif." },
-      { aspek: "Penguasaan IT", skor: 86, alasan: "Visualisasi grafik fungsi dengan GeoGebra sangat membantu pemahaman abstrak." },
-      { aspek: "Evaluasi", skor: 82, alasan: "Kuis diagnostik awal dan akhir berjalan tertib." },
-    ],
-    kesimpulan:
-      "Otsukare-sama desu, Rizky-sensei! Pemanfaatan GeoGebra dan struktur latihan bertingkat menghasilkan capaian Sangat Baik (85/100).",
-    kekuatan: [
-      "Visualisasi konsep matematika abstrak menjadi konkret dengan GeoGebra.",
-      "Struktur perencanaan pembelajaran sangat sistematis.",
-    ],
-    saran: [
-      "Perbanyak studi kasus matematika terapan dalam kehidupan sehari-hari.",
-    ],
-    naskahPodcast: [
-      "Sensei-AI: Halo Rizky-sensei! Selamat atas capaian skor 85 dengan predikat Sangat Baik pada supervisi Matematika Lanjut.",
-      "Sensei-AI: Penggunaan GeoGebra untuk memvisualisasikan grafik sangat efektif membantu siswa. Mari terus kembangkan soal kontekstual sehari-hari ya, Sensei!",
-    ].join("\n\n"),
-    sampleAnswers: { 1: 4, 2: "Ya", 3: 4, 4: "Diskusi terarah disertai tanya jawab dan demonstrasi", 5: 4, 6: "GeoGebra & Desmos Classroom", 7: 4, 8: "Visualisasi grafik sangat membantu siswa memahami limit fungsi." },
-  });
-
-  await createCompletedSupervisi({
-    guru: guru3,
-    instrumen: instrumen1,
-    daysAgo: 7,
-    skorTotal: 89,
-    predikat: "Sangat Baik",
-    skorAspek: [
-      { aspek: "Perencanaan", skor: 90, alasan: "Modul ajar Bahasa Jepang dilengkapi kartu kanji digital dan audio pelafalan." },
-      { aspek: "Pelaksanaan", skor: 92, alasan: "Roleplay percakapan siswa berlangsung sangat hidup dan menyenangkan." },
-      { aspek: "Penguasaan IT", skor: 87, alasan: "Penggunaan flashcard digital interaktif dan audio native sangat efektif." },
-      { aspek: "Evaluasi", skor: 87, alasan: "Asesmen lisan dan tertulis terdokumentasi dengan baik." },
-    ],
-    kesimpulan:
-      "Subarashii, Nadia-sensei! Kelas Bahasa Jepang berlangsung sangat interaktif dengan skor 89 (Sangat Baik).",
-    kekuatan: [
-      "Metode roleplay membuat seluruh siswa berani berbicara aktif.",
-      "Media audio-visual memperkaya pengalaman belajar bahasa asing.",
-    ],
-    saran: [
-      "Integrasikan rekaman suara mandiri siswa sebagai portofolio pelafalan bulanan.",
-    ],
-    naskahPodcast: [
-      "Sensei-AI: Konnichiwa, Nadia-sensei! Evaluasi supervisi kelas Bahasa Jepang Anda meraih skor 89 dengan predikat Sangat Baik.",
-      "Sensei-AI: Aspek Pelaksanaan mencapai skor 92 berkat metode roleplay yang seru. Terus pertahankan semangat kreatif ini ya, Sensei!",
-    ].join("\n\n"),
-    sampleAnswers: { 1: 5, 2: "Ya", 3: 5, 4: "Project/Problem-Based Learning kolaboratif dengan diskusi aktif kelompok", 5: 4, 6: "Anki Deck, Padlet, dan Kahoot", 7: 4, 8: "Roleplay percakapan membuat kelas sangat hidup." },
-  });
-
-  await createCompletedSupervisi({
-    guru: guru4,
-    instrumen: instrumen1,
-    daysAgo: 2,
-    skorTotal: 77,
+    daysAgo: 5,
+    statusPenugasan: "selesai",
+    catatanVerifikasi:
+      "Perangkat Bahasa Indonesia telah terverifikasi lengkap dan selaras CP Fase C.",
+    skorTotal: 86.0,
     predikat: "Baik",
+    disahkan: true,
+    nomorRegistrasi: "REG-SUP/2026/002",
     skorAspek: [
-      { aspek: "Perencanaan", skor: 80, alasan: "Modul praktikum Fisika sudah lengkap dengan prosedur keselamatan kerja." },
-      { aspek: "Pelaksanaan", skor: 78, alasan: "Demonstrasi eksperimen menarik, namun waktu diskusi kesimpulan agak singkat." },
-      { aspek: "Penguasaan IT", skor: 74, alasan: "Sudah menggunakan simulasi PhET, dapat ditingkatkan dengan pengumpulan data kolaboratif." },
-      { aspek: "Evaluasi", skor: 76, alasan: "Laporan praktikum perlu umpan balik tertulis yang lebih cepat." },
+      {
+        aspek: "Pembukaan Pembelajaran",
+        skor: 88,
+        alasan:
+          "Apersepsi teks argumentasi menggunakan isu lingkungan sekolah memancing diskusi awal yang hidup.",
+      },
+      {
+        aspek: "Kegiatan Inti",
+        skor: 87,
+        alasan:
+          "Diskusi kelompok berjalan dinamis, mayoritas siswa aktif berpendapat dengan santun.",
+      },
+      {
+        aspek: "Asesmen dan Penutup",
+        skor: 83,
+        alasan:
+          "Umpan balik lisan sudah baik, namun rubrik penilaian tulisan perlu dibagikan lebih awal.",
+      },
+      {
+        aspek: "Pemanfaatan Teknologi Informasi",
+        skor: 86,
+        alasan:
+          "Menggunakan Padlet dan Quizizz sebagai media kurasi ide peserta didik.",
+      },
     ],
     kesimpulan:
-      "Otsukare-sama desu, Bagas-sensei! Capaian supervisi berada pada kategori Baik (77/100) dengan potensi penguatan pada manajemen waktu diskusi dan asesmen digital.",
+      "Pembelajaran Bahasa Indonesia oleh Ibu Siti Aminah memperoleh nilai akhir 86,0 (Baik). Kelas berlangsung interaktif dengan penguatan literasi kritis yang kuat.",
     kekuatan: [
-      "Demonstrasi eksperimen fisika memancing rasa ingin tahu siswa.",
-      "Kesiapan prosedur praktikum sudah baik.",
+      "Pertanyaan pemantik sangat relevan dengan konteks keseharian siswa.",
+      "Pemanfaatan Padlet efektif menampung aspirasi siswa yang pendiam.",
     ],
     saran: [
-      "Gunakan spreadsheet kolaboratif saat siswa mencatat data eksperimen agar analisis grafik lebih cepat.",
-      "Alokasikan 15 menit terakhir khusus untuk refleksi dan umpan balik hasil praktikum.",
+      "Bagikan rubrik penilaian penulisan argumentasi sebelum siswa mulai menyusun draf.",
+      "Sediakan bank kosakata pendamping bagi kelompok siswa yang membutuhkan scaffolding.",
     ],
-    naskahPodcast: [
-      "Sensei-AI: Ohayou gozaimasu, Bagas-sensei! Terima kasih atas dedikasi Anda di kelas Fisika Eksperimen. Sensei meraih skor 77 dengan predikat Baik.",
-      "Sensei-AI: Eksperimen yang Anda bawakan sangat menarik. Untuk pertemuan selanjutnya, mari manfaatkan lembar data kolaboratif agar waktu kesimpulan di akhir kelas lebih optimal. Ganbatte kudasai!",
-    ].join("\n\n"),
-    sampleAnswers: { 1: 4, 2: "Ya", 3: 4, 4: "Diskusi terarah disertai tanya jawab dan demonstrasi", 5: 3, 6: "Simulasi PhET Colorado", 7: 3, 8: "Praktikum berjalan lancar namun waktu menyimpulkan di akhir kelas perlu ditambah." },
+    catatanAdmin:
+      "Laporan telah disahkan Kepala Sekolah dan diteruskan ke Pengawas Sekolah untuk penetapan Rencana Tindak Lanjut (RTL).",
+    sampleAnswers: {
+      1: { nilai: 4, catatan: "Kelas dimulai tertib dengan ice breaking literasi." },
+      13: { nilai: 3, catatan: "Asesmen formatif melalui Padlet & tanya jawab lisan." },
+    },
   });
 
-  // 8. Seed Log Aktivitas Awal
+  // Record 3: Ahmad Fauzi -> Tahap "dalam_penilaian" (Draf AI Co-Evaluator siap dinilai & disahkan Kepsek)
+  await seedSupervisiRecord({
+    guru: guru3,
+    instrumen: instrumen2,
+    daysAgo: 2,
+    statusPenugasan: "dalam_penilaian",
+    catatanVerifikasi:
+      "Berkas Modul Ajar Informatika dan LKPD proyek koding disetujui Kepala Sekolah. Siap dinilai & disahkan.",
+    skorTotal: 84.5,
+    predikat: "Baik",
+    disahkan: false,
+    skorAspek: [
+      {
+        aspek: "Pembukaan Pembelajaran",
+        skor: 86,
+        alasan:
+          "Berdasarkan evaluasi diri & modul ajar, tujuan pembelajaran algoritma disampaikan runtut.",
+      },
+      {
+        aspek: "Kegiatan Inti",
+        skor: 85,
+        alasan:
+          "Siswa aktif menyusun alur logika berpasangan (pair programming) dengan bimbingan guru.",
+      },
+      {
+        aspek: "Asesmen dan Penutup",
+        skor: 80,
+        alasan:
+          "Asesmen unjuk kerja terlaksana, namun waktu refleksi penutup masih perlu ditambah 5 menit.",
+      },
+      {
+        aspek: "Pemanfaatan Teknologi Informasi",
+        skor: 87,
+        alasan:
+          "Penggunaan Scratch/Blockly dan simulator web berjalan sangat efektif.",
+      },
+    ],
+    kesimpulan:
+      "[DRAF AI CO-EVALUATOR] Evaluasi awal menunjukkan capaian baik (84,5). Menunggu validasi skor observasi kelas dan pengesahan resmi oleh Kepala Sekolah.",
+    kekuatan: [
+      "Pendekatan pair-programming melatih kolaborasi dan debugging mandiri.",
+      "LKPD memuat panduan visual langkah demi langkah yang jelas.",
+    ],
+    saran: [
+      "Sisihkan 10 menit khusus sebelum bel penutup untuk refleksi bersama peserta didik.",
+    ],
+    sampleAnswers: {
+      1: {
+        nilai: 4,
+        catatan: "Membuka dengan review materi logika percabangan sebelumnya.",
+      },
+      2: {
+        nilai: 3,
+        catatan: "Siswa bekerja berpasangan pada proyek mini animasi interaktif.",
+      },
+      3: {
+        nilai: 3,
+        catatan: "Dilakukan kuis refleksi cepat 5 soal sebelum penutupan.",
+      },
+      4: {
+        nilai:
+          "Memanfaatkan Google Classroom, Scratch Edu, dan proyektor. Kendala pada stabilitas Wi-Fi saat unduh aset, disiasati dengan repositori lokal.",
+        catatan: "Tersedia repositori aset offline di server lab komputer.",
+      },
+    },
+  });
+
+  // Record 4: Dewi Lestari -> Tahap "perlu_revisi" (Dikembalikan oleh Kepala Sekolah)
+  await seedSupervisiRecord({
+    guru: guru4,
+    instrumen: instrumen2,
+    daysAgo: 1,
+    statusPenugasan: "perlu_revisi",
+    catatanVerifikasi:
+      "Mohon lengkapi tautan bukti foto/LKPD eksperimen IPAS dan rincian kriteria asesmen formatif pada instrumen sebelum observasi kelas dilanjutkan.",
+    sampleAnswers: {
+      1: {
+        nilai: 3,
+        catatan: "Modul ajar sudah disiapkan, menunggu kelengkapan lampiran asesmen.",
+      },
+      2: {
+        nilai: 3,
+        catatan: "Praktikum perubahan wujud benda dilaksanakan berkelompok.",
+      },
+    },
+  });
+
+  // Berikan 1 Penugasan "belum" untuk Guru 1 (Budi Santoso) untuk siklus semester berjalan
+  await seedSupervisiRecord({
+    guru: guru1,
+    instrumen: instrumen2,
+    daysAgo: 0,
+    statusPenugasan: "belum",
+    sampleAnswers: {},
+  });
+
+  // 7. Seed Perangkat Pembelajaran & Bukti Supervisi (6 Komponen)
+  await prisma.perangkatSupervisi.create({
+    data: {
+      guruId: guru1.id,
+      judulPembelajaran:
+        "Pemodelan Fungsi Linear & Visualisasi Grafik Kontekstual",
+      mataPelajaran: "Matematika",
+      kelasFase: "Kelas 6 / Fase C",
+      semester: "Ganjil 2026/2027",
+      tanggalPelaksanaan: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+      modulAjarJudul: "Modul Ajar Berdiferensiasi: Fungsi Linear & Gradien",
+      modulAjarTujuan:
+        "Peserta didik mampu memodelkan hubungan dua besaran kontekstual menjadi persamaan dan grafik linear dengan GeoGebra.",
+      modulAjarUrl: "https://guru.kemdikbud.go.id/perangkat-ajar/matematika",
+      modulAjarFileNama: "Modul_Ajar_Matematika_Budi_2026.pdf",
+      modulAjarStatus: true,
+      lkpdJudul: "LKPD Bertingkat 3 Level Kesiapan Belajar",
+      lkpdDeskripsi:
+        "Lembar kerja eksplorasi tarif transportasi daring menggunakan tabel nilai dan grafik GeoGebra.",
+      lkpdUrl: "https://www.geogebra.org/classroom",
+      lkpdFileNama: "LKPD_Berdiferensiasi_Budi.pdf",
+      lkpdStatus: true,
+      asesmenJenis: "Asesmen Diagnostik, Formatif & Rubrik KKTP",
+      asesmenKriteria:
+        "Ketepatan model matematika (40%), ketelitian grafik (30%), presentasi kelompok (30%).",
+      asesmenUrl: "https://docs.google.com/spreadsheets/d/rubrik-budi",
+      asesmenFileNama: "Rubrik_KKTP_Matematika_Budi.pdf",
+      asesmenStatus: true,
+      fotoBuktiJSON: JSON.stringify([
+        {
+          judul: "Apersepsi & Demonstrasi GeoGebra",
+          url: "https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=800&q=80",
+          keterangan: "Siswa mengamati perubahan gradien grafik di proyektor.",
+        },
+        {
+          judul: "Diskusi Kelompok Berdiferensiasi",
+          url: "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=800&q=80",
+          keterangan: "Setiap kelompok menyelesaikan LKPD sesuai level kesiapan.",
+        },
+      ]),
+      fotoBuktiCatatan:
+        "Dokumentasi telah mendapat izin sekolah dan menjaga privasi siswa.",
+      fotoBuktiStatus: true,
+      mediaJenis: "Simulasi Interaktif (GeoGebra Classroom)",
+      mediaPlatform: "Proyektor, Laptop, GeoGebra, Google Classroom",
+      mediaUrl: "https://www.geogebra.org/",
+      mediaDeskripsi:
+        "Visualisasi grafik secara real-time selama diskusi inti.",
+      mediaStatus: true,
+      refleksiKeberhasilan:
+        "90% peserta didik berhasil menginterpretasikan kemiringan grafik dengan benar.",
+      refleksiKendala:
+        "Dua siswa masih memerlukan pendampingan tambahan saat menentukan titik potong sumbu.",
+      refleksiTindakLanjut:
+        "Menyediakan video tutorial singkat berdurasi 3 menit di Google Classroom.",
+      refleksiStatus: true,
+      statusVerifikasi: "lengkap",
+      catatanSupervisor:
+        "Keenam komponen perangkat pembelajaran Bapak Budi lengkap dan menjadi model rujukan di sekolah.",
+      diverifikasiOleh: kepsek.nama,
+      diverifikasiPada: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000),
+    },
+  });
+
+  await prisma.perangkatSupervisi.create({
+    data: {
+      guruId: guru2.id,
+      judulPembelajaran:
+        "Menulis Teks Argumentasi Kritis Bertema Lingkungan Sekolah",
+      mataPelajaran: "Bahasa Indonesia",
+      kelasFase: "Kelas 5 / Fase C",
+      semester: "Ganjil 2026/2027",
+      tanggalPelaksanaan: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      modulAjarJudul: "Modul Ajar Bahasa Indonesia: Teks Argumentasi",
+      modulAjarTujuan:
+        "Peserta didik mampu menyusun gagasan argumentatif disertai bukti logis secara santun.",
+      modulAjarUrl: "https://guru.kemdikbud.go.id/",
+      modulAjarFileNama: "Modul_Ajar_BIndo_Siti.pdf",
+      modulAjarStatus: true,
+      lkpdJudul: "LKPD Peta Pikiran & Struktur Argumentasi",
+      lkpdDeskripsi:
+        "Panduan menyusun tesis, argumen pendukung, dan simpulan.",
+      lkpdUrl: "https://docs.google.com/document/d/lkpd-siti",
+      lkpdFileNama: "LKPD_Argumentasi_Siti.pdf",
+      lkpdStatus: true,
+      asesmenJenis: "Formatif & Rubrik Menulis",
+      asesmenKriteria:
+        "Kesesuaian struktur (35%), kekuatan bukti (35%), kaidah EYD (30%).",
+      asesmenUrl: "https://docs.google.com/spreadsheets/d/rubrik-siti",
+      asesmenFileNama: "Rubrik_Menulis_Siti.pdf",
+      asesmenStatus: true,
+      fotoBuktiJSON: JSON.stringify([
+        {
+          judul: "Kurasi Ide Melalui Padlet",
+          url: "https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=800&q=80",
+          keterangan: "Siswa menuliskan argumen awal secara kolaboratif.",
+        },
+      ]),
+      fotoBuktiCatatan: "Foto pembelajaran sesi 1.",
+      fotoBuktiStatus: true,
+      mediaJenis: "Papan Kolaborasi Digital & Kuis",
+      mediaPlatform: "Padlet, Quizizz, Proyektor",
+      mediaUrl: "https://padlet.com/",
+      mediaDeskripsi: "Mendorong partisipasi setara seluruh siswa.",
+      mediaStatus: true,
+      refleksiKeberhasilan:
+        "Siswa bersemangat menyampaikan pendapat terkait pengelolaan sampah sekolah.",
+      refleksiKendala: "Sebagian siswa masih tertukar antara fakta dan opini.",
+      refleksiTindakLanjut:
+        "Membuat kartu latihan pembedaan kalimat fakta dan opini.",
+      refleksiStatus: true,
+      statusVerifikasi: "lengkap",
+      catatanSupervisor:
+        "Perangkat pembelajaran Ibu Siti lengkap dan terverifikasi oleh Kepala Sekolah.",
+      diverifikasiOleh: kepsek.nama,
+      diverifikasiPada: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000),
+    },
+  });
+
+  await prisma.perangkatSupervisi.create({
+    data: {
+      guruId: guru4.id,
+      judulPembelajaran: "Eksperimen Energi & Perubahan Wujud Benda",
+      mataPelajaran: "IPAS & Sains Terpadu",
+      kelasFase: "Kelas 4 / Fase B",
+      semester: "Ganjil 2026/2027",
+      tanggalPelaksanaan: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+      modulAjarJudul: "Modul Ajar IPAS: Perubahan Energi di Sekitar Kita",
+      modulAjarTujuan:
+        "Peserta didik mengidentifikasi bentuk dan perubahan energi melalui percobaan sederhana.",
+      modulAjarUrl: "https://guru.kemdikbud.go.id/",
+      modulAjarFileNama: "Modul_Ajar_IPAS_Dewi.pdf",
+      modulAjarStatus: true,
+      lkpdJudul: "LKPD Pengamatan Praktikum Kelompok",
+      lkpdDeskripsi: "Tabel pengamatan hasil percobaan dan pertanyaan diskusi.",
+      lkpdUrl: "",
+      lkpdFileNama: "LKPD_IPAS_Dewi.docx",
+      lkpdStatus: true,
+      asesmenJenis: "Observasi Kinerja",
+      asesmenKriteria: "Rubrik praktikum belum dilampirkan.",
+      asesmenUrl: "",
+      asesmenFileNama: "",
+      asesmenStatus: false,
+      fotoBuktiJSON: JSON.stringify([]),
+      fotoBuktiCatatan: "",
+      fotoBuktiStatus: false,
+      mediaJenis: "Simulasi PhET Colorado",
+      mediaPlatform: "PhET, Proyektor, Laptop",
+      mediaUrl: "https://phet.colorado.edu/",
+      mediaDeskripsi: "Simulasi perubahan energi sebelum praktik.",
+      mediaStatus: true,
+      refleksiKeberhasilan: "Siswa antusias mencoba alat peraga sederhana.",
+      refleksiKendala: "Lampiran foto & rubrik penilaian belum diunggah.",
+      refleksiTindakLanjut: "Melengkapi berkas asesmen dan foto pelaksanaan.",
+      refleksiStatus: true,
+      statusVerifikasi: "revisi",
+      catatanSupervisor:
+        "Mohon unggah file Rubrik Asesmen Kinerja dan minimal 1 Foto Bukti Pelaksanaan kelas.",
+      diverifikasiOleh: kepsek.nama,
+      diverifikasiPada: new Date(),
+    },
+  });
+
+  // 8. Log Aktivitas Awal
   await prisma.logAktivitas.createMany({
     data: [
       {
         userId: admin.id,
         namaUser: admin.nama,
         role: "admin",
-        aksi: "INIT_SYSTEM",
-        detail: "Inisialisasi sistem Web Agent Supervisor v2 & konfigurasi awal instrumen",
+        aksi: "INIT_SIPENA",
+        detail:
+          "Inisialisasi sistem SIPENA v2 (4 Peran: Guru, Kepala Sekolah, Pengawas Sekolah, Admin Sistem + Bot WhatsApp)",
       },
       {
-        userId: guru1.id,
-        namaUser: guru1.nama,
-        role: "guru",
-        aksi: "SUBMIT_SUPERVISI",
-        detail: "Mengirim jawaban Instrumen Supervisi Akademik & Pembelajaran Digital 2026",
+        userId: kepsek.id,
+        namaUser: kepsek.nama,
+        role: "kepala_sekolah",
+        aksi: "SAHKAN_LAPORAN_SUPERVISI",
+        detail:
+          "Mengesahkan & mengunci permanen laporan supervisi Budi Santoso (REG-SUP/2026/001) dan Siti Aminah (REG-SUP/2026/002)",
       },
       {
-        userId: guru1.id,
-        namaUser: guru1.nama,
-        role: "guru",
-        aksi: "PODCAST_GENERATED",
-        detail: "Podcast evaluasi suara Sensei-AI berhasil dibuat (Skor: 92 - Sangat Baik)",
+        userId: pengawas.id,
+        namaUser: pengawas.nama,
+        role: "pengawas",
+        aksi: "TETAPKAN_RTL_PENGAWAS",
+        detail:
+          "Menetapkan Rencana Tindak Lanjut (RTL) untuk Budi Santoso dengan status progres: Sedang Berjalan",
       },
       {
-        userId: admin.id,
-        namaUser: admin.nama,
-        role: "admin",
-        aksi: "CATATAN_ADMIN",
-        detail: "Memberikan catatan apresiasi supervisor pada hasil evaluasi Aulia Rahmawati, S.Pd., Gr.",
+        userId: kepsek.id,
+        namaUser: kepsek.nama,
+        role: "kepala_sekolah",
+        aksi: "KEMBALIKAN_REVISI",
+        detail:
+          "Mengembalikan berkas supervisi Dewi Lestari (status: Perlu Revisi) untuk melengkapi rubrik & foto bukti",
       },
     ],
   });

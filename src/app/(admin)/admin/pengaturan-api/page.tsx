@@ -6,8 +6,6 @@ import {
   Eye,
   EyeOff,
   Save,
-  Play,
-  Volume2,
   Send,
   CheckCircle2,
   AlertCircle,
@@ -172,7 +170,6 @@ export default function AdminPengaturanApiPage() {
 
   // Toggle visibilitas field rahasia
   const [showOpenAiKey, setShowOpenAiKey] = useState(false);
-  const [showFishKey, setShowFishKey] = useState(false);
   const [showShirokoSecret, setShowShirokoSecret] = useState(false);
 
   // State pengujian & streaming
@@ -195,13 +192,6 @@ export default function AdminPengaturanApiPage() {
   const [modelSearch, setModelSearch] = useState("");
   const [showModelModal, setShowModelModal] = useState(false);
   const [modelFetchMsg, setModelFetchMsg] = useState("");
-
-  const [sampleText, setSampleText] = useState(
-    "Ohayou gozaimasu, Sensei! Ini adalah uji suara podcast Sensei-AI melalui integrasi Fish Audio."
-  );
-  const [testingFish, setTestingFish] = useState(false);
-  const [fishAudioUrl, setFishAudioUrl] = useState<string>("");
-  const [fishResultMsg, setFishResultMsg] = useState<string>("");
 
   const [testingShiroko, setTestingShiroko] = useState(false);
   const [shirokoResult, setShirokoResult] = useState<string>("");
@@ -396,38 +386,6 @@ export default function AdminPengaturanApiPage() {
     } finally {
       setTestingOpenAi(false);
       setIsStreamingAi(false);
-    }
-  };
-
-  const handleTestFish = async () => {
-    setTestingFish(true);
-    setFishResultMsg("");
-    setFishAudioUrl("");
-    try {
-      const res = await fetch("/api/admin/pengaturan/test-fish", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: sampleText,
-          apiKey: settings.fish_api_key,
-          voiceId: settings.fish_voice_id,
-          model: settings.fish_model,
-          speed: settings.fish_speed,
-          temperature: settings.fish_temperature,
-          topP: settings.fish_top_p,
-          normalize: settings.fish_normalize !== "false",
-          chunkLength: settings.fish_chunk_length,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setFishResultMsg(`✅ ${data.message}`);
-        setFishAudioUrl(data.audioDataUrl || "");
-      } else {
-        setFishResultMsg(`❌ ${data.error}`);
-      }
-    } finally {
-      setTestingFish(false);
     }
   };
 
@@ -903,206 +861,7 @@ export default function AdminPengaturanApiPage() {
         )}
       </div>
 
-      {/* 2. Fish Audio TTS */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-card space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
-          <div>
-            <span className="px-2.5 py-0.5 rounded-full bg-sakura-100 text-sakura-700 text-xs font-bold">
-              Podcast Suara (TTS)
-            </span>
-            <h3 className="font-display font-bold text-lg text-slate-900 mt-1">
-              2. Konfigurasi Fish Audio TTS (Kloning Suara Sensei-AI)
-            </h3>
-            <p className="text-xs text-slate-500">
-              Atur API Key Fish Audio, ID Suara (Reference ID sample buatan sendiri), kecepatan bicara, dan parameter akustik.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Fish Audio API Key{" "}
-              {hasSecret.fish_api_key && (
-                <span className="text-emerald-600 font-semibold">(Tersimpan)</span>
-              )}
-            </label>
-            <div className="relative">
-              <input
-                type={showFishKey ? "text" : "password"}
-                value={settings.fish_api_key || ""}
-                onChange={(e) => updateField("fish_api_key", e.target.value)}
-                placeholder="Masukkan API Key Fish Audio..."
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowFishKey((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                {showFishKey ? (
-                  <EyeOff className="w-4 h-4" />
-                ) : (
-                  <Eye className="w-4 h-4" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Reference ID / Voice ID Sample Suara
-            </label>
-            <input
-              type="text"
-              value={settings.fish_voice_id || ""}
-              onChange={(e) => updateField("fish_voice_id", e.target.value)}
-              placeholder="Contoh: 7f92f8afb8ec43bf81429cc1c9199cb1"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono"
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Model / Backend
-              </label>
-              <select
-                value={settings.fish_model || "s2.1-pro-free"}
-                onChange={(e) => updateField("fish_model", e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm bg-white"
-              >
-                <option value="s2.1-pro-free">s2.1-pro-free (Free Tier Default)</option>
-                <option value="s2.1-pro">s2.1-pro (Recommended Production)</option>
-                <option value="drama-3">drama-3 (Expressive & Emotive)</option>
-                <option value="s2-pro">s2-pro</option>
-                <option value="speech-1.5">speech-1.5 (Legacy)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Format Output
-              </label>
-              <select
-                value={settings.fish_format || "mp3"}
-                onChange={(e) => updateField("fish_format", e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm bg-white"
-              >
-                <option value="mp3">MP3 (128kbps)</option>
-                <option value="wav">WAV (Lossless)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Kecepatan Bicara
-              </label>
-              <input
-                type="number"
-                step="0.05"
-                min="0.5"
-                max="2.0"
-                value={settings.fish_speed || "1.0"}
-                onChange={(e) => updateField("fish_speed", e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-4 gap-2.5">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Temperature
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                min="0.1"
-                max="1.0"
-                value={settings.fish_temperature || "0.7"}
-                onChange={(e) =>
-                  updateField("fish_temperature", e.target.value)
-                }
-                className="w-full px-2.5 py-2.5 rounded-xl border border-slate-200 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Top_P
-              </label>
-              <input
-                type="number"
-                step="0.05"
-                min="0.1"
-                max="1.0"
-                value={settings.fish_top_p || "0.7"}
-                onChange={(e) => updateField("fish_top_p", e.target.value)}
-                className="w-full px-2.5 py-2.5 rounded-xl border border-slate-200 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Chunk Len
-              </label>
-              <input
-                type="number"
-                step="10"
-                min="100"
-                max="300"
-                value={settings.fish_chunk_length || "200"}
-                onChange={(e) =>
-                  updateField("fish_chunk_length", e.target.value)
-                }
-                className="w-full px-2.5 py-2.5 rounded-xl border border-slate-200 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Normalisasi
-              </label>
-              <select
-                value={settings.fish_normalize || "true"}
-                onChange={(e) => updateField("fish_normalize", e.target.value)}
-                className="w-full px-2.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-white"
-              >
-                <option value="true">Aktif</option>
-                <option value="false">Mati</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Box Tes Suara */}
-        <div className="p-4 rounded-2xl bg-sakura-50/50 border border-sakura-200/70 space-y-3">
-          <label className="block text-xs font-bold text-sakura-800">
-            Uji Suara Fish Audio (Teks Contoh)
-          </label>
-          <div className="flex flex-col sm:flex-row gap-2.5">
-            <input
-              type="text"
-              value={sampleText}
-              onChange={(e) => setSampleText(e.target.value)}
-              className="flex-1 px-3.5 py-2 rounded-xl border border-sakura-200 bg-white text-sm"
-            />
-            <button
-              type="button"
-              onClick={handleTestFish}
-              disabled={testingFish}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-sakura-500 hover:bg-sakura-600 text-white text-xs font-bold transition shrink-0"
-            >
-              <Volume2 className="w-4 h-4" />
-              {testingFish ? "Menghasilkan Suara..." : "Tes Suara"}
-            </button>
-          </div>
-          {fishResultMsg && (
-            <p className="text-xs font-medium text-slate-700">{fishResultMsg}</p>
-          )}
-          {fishAudioUrl && (
-            <audio controls src={fishAudioUrl} className="w-full h-10 mt-2" />
-          )}
-        </div>
-      </div>
-
-      {/* 3. Integrasi Bot Shiroko */}
+      {/* 2. Integrasi Bot Shiroko */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-card space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
           <div>
@@ -1110,10 +869,10 @@ export default function AdminPengaturanApiPage() {
               WhatsApp Gateway
             </span>
             <h3 className="font-display font-bold text-lg text-slate-900 mt-1">
-              3. Integrasi Bot Shiroko (Notifikasi & Pengiriman Podcast WA)
+              2. Integrasi Bot WhatsApp Shiroko (Ambil Hasil & Laporan PDF WA)
             </h3>
             <p className="text-xs text-slate-500">
-              Kirim pengingat tenggat dan rekaman podcast hasil supervisi ke WhatsApp guru melalui Bot Shiroko.
+              Kirim notifikasi pengesahan serta sediakan endpoint bagi guru untuk mengambil ringkasan hasil, RTL Pengawas, dan dokumen PDF resmi langsung melalui Bot WhatsApp Shiroko.
             </p>
           </div>
           <button
@@ -1194,7 +953,7 @@ export default function AdminPengaturanApiPage() {
             • GET /api/integrasi/shiroko/hasil/:nomor — Bot mengambil ringkasan hasil guru via nomor WA
           </p>
           <p className="font-mono text-[11px]">
-            • POST /api/integrasi/shiroko/kirim-podcast — Bot meminta audio podcast untuk dikirim ke WA guru
+            • POST /api/integrasi/shiroko/kirim-podcast — Kirim ringkasan hasil & file PDF resmi (Base64) ke WhatsApp guru
           </p>
         </div>
 

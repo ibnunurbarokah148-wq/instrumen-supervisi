@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { SenseiMascot } from "@/components/SenseiMascot";
+import { RoleSwitcher } from "@/components/RoleSwitcher";
 import {
   LayoutDashboard,
   KeyRound,
@@ -16,19 +17,38 @@ import {
   LogOut,
   Menu,
   X,
-  Sparkles,
+  ShieldCheck,
+  BookOpen,
 } from "lucide-react";
 
+interface CurrentUser {
+  id: string;
+  nama: string;
+  role: string;
+  jabatan?: string | null;
+}
+
 const ADMIN_NAV = [
-  { href: "/admin", label: "Beranda", icon: LayoutDashboard },
-  { href: "/admin/pengaturan-api", label: "Pengaturan API", icon: KeyRound },
-  { href: "/admin/instrumen", label: "Editor Pertanyaan", icon: FileEdit },
-  { href: "/admin/guru", label: "Manajemen Guru", icon: Users },
-  { href: "/admin/hasil", label: "Hasil & Grafik", icon: BarChart3 },
-  { href: "/admin/penilaian-ai", label: "Pengaturan Penilaian AI", icon: Bot },
-  { href: "/admin/template-dokumen", label: "Template Dokumen", icon: FileText },
-  { href: "/admin/log", label: "Log & Keamanan", icon: ShieldAlert },
+  { href: "/admin", label: "Beranda Eksekutif", icon: LayoutDashboard },
+  { href: "/admin/hasil", label: "Penilaian, Pengesahan & RTL", icon: BarChart3 },
+  {
+    href: "/admin/perangkat",
+    label: "Verifikasi Perangkat Ajar",
+    icon: BookOpen,
+  },
+  { href: "/admin/instrumen", label: "Editor Instrumen", icon: FileEdit },
+  { href: "/admin/guru", label: "Manajemen Pengguna", icon: Users },
+  { href: "/admin/penilaian-ai", label: "Rubrik & Prompt AI", icon: Bot },
+  { href: "/admin/template-dokumen", label: "Kop & Format Laporan", icon: FileText },
+  { href: "/admin/pengaturan-api", label: "Pengaturan AI & Bot WA", icon: KeyRound },
+  { href: "/admin/log", label: "Log & Audit Keamanan", icon: ShieldAlert },
 ];
+
+function getRoleDisplay(role?: string) {
+  if (role === "kepala_sekolah") return "Kepala Sekolah";
+  if (role === "pengawas") return "Pengawas Sekolah";
+  return "Administrator";
+}
 
 export default function AdminDashboardLayout({
   children,
@@ -38,6 +58,16 @@ export default function AdminDashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [user, setUser] = useState<CurrentUser | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.user) setUser(d.user);
+      })
+      .catch(() => {});
+  }, [pathname]);
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -55,7 +85,7 @@ export default function AdminDashboardLayout({
         />
       )}
 
-      {/* Sidebar Kiri Lebar (Control Room Pastel-Netral sesuai PRD 12) */}
+      {/* Sidebar Kiri */}
       <aside
         className={`fixed lg:static inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 flex flex-col justify-between transition-transform duration-200 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
@@ -67,14 +97,16 @@ export default function AdminDashboardLayout({
             <div className="flex items-center gap-3">
               <SenseiMascot size="sm" mood="control" />
               <div>
-                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sora-100 text-sora-700 text-[10px] font-extrabold uppercase tracking-wider">
-                  <Sparkles className="w-2.5 h-2.5 text-sakura-500" />
-                  Control Room
+                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-extrabold uppercase tracking-wider">
+                  <ShieldCheck className="w-2.5 h-2.5" />
+                  Panel Pimpinan
                 </div>
                 <h1 className="font-display font-bold text-base text-slate-900 leading-tight mt-0.5">
-                  Agent Supervisor
+                  SIPENA Supervisor
                 </h1>
-                <p className="text-[11px] text-slate-500">Panel Administrator</p>
+                <p className="text-[11px] text-slate-500">
+                  {getRoleDisplay(user?.role)}
+                </p>
               </div>
             </div>
             <button
@@ -102,8 +134,8 @@ export default function AdminDashboardLayout({
                   onClick={() => setSidebarOpen(false)}
                   className={`flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm font-bold transition-all ${
                     isActive
-                      ? "bg-gradient-to-r from-sora-500 to-sora-600 text-white shadow-sm"
-                      : "text-slate-600 hover:bg-sora-50/80 hover:text-sora-700"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-slate-600 hover:bg-blue-50 hover:text-blue-700"
                   }`}
                 >
                   <Icon
@@ -118,16 +150,19 @@ export default function AdminDashboardLayout({
           </nav>
         </div>
 
-        {/* Footer Sidebar dengan Maskot Kecil di Pojok (PRD Bagian 12) */}
+        {/* Footer Sidebar */}
         <div className="p-4 border-t border-slate-100 space-y-3">
-          <div className="rounded-2xl bg-gradient-to-r from-sora-50 via-white to-sakura-50 border border-sora-200/70 p-3 flex items-center gap-3">
+          <div className="rounded-2xl bg-slate-50 border border-slate-200 p-3 flex items-center gap-3">
             <SenseiMascot size="sm" mood="happy" />
             <div className="min-w-0">
               <p className="text-xs font-bold text-slate-800 truncate">
-                Sensei-AI Core v2
+                {user?.nama || "Pimpinan & Admin"}
               </p>
               <p className="text-[11px] text-slate-500 leading-snug">
-                Role: <span className="font-bold text-sakura-600">ADMIN</span> • Terisolasi dari Guru
+                Peran:{" "}
+                <span className="font-bold text-blue-700">
+                  {getRoleDisplay(user?.role).toUpperCase()}
+                </span>
               </p>
             </div>
           </div>
@@ -138,15 +173,15 @@ export default function AdminDashboardLayout({
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-rose-200 bg-rose-50/60 text-rose-700 hover:bg-rose-100 text-xs font-bold transition"
           >
             <LogOut className="w-4 h-4" />
-            Keluar dari Panel Admin
+            Keluar dari Panel Kendali
           </button>
         </div>
       </aside>
 
       {/* Area Konten Utama */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Topbar Mobile/Tablet */}
-        <header className="bg-white border-b border-slate-200 px-4 sm:px-8 py-3.5 flex items-center justify-between sticky top-0 z-20">
+        {/* Topbar */}
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-8 py-3 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-20">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -161,18 +196,19 @@ export default function AdminDashboardLayout({
                   n.href === "/admin"
                     ? pathname === "/admin"
                     : pathname.startsWith(n.href)
-                )?.label || "Dashboard Admin"}
+                )?.label || "Panel Kendali Supervisi SIPENA"}
               </h2>
               <p className="text-xs text-slate-500 hidden sm:block">
-                Sistem Manajemen Supervisi Akademik Berbasis AI & Fish Audio Podcast
+                SIPENA — Sistem Informasi Supervisi & Evaluasi Akademik (AI Co-Evaluator & Bot WA)
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sora-50 border border-sora-200 text-sora-700 text-xs font-bold">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <RoleSwitcher currentRole={user?.role} />
+            <span className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Sensei-AI Online
+              SIPENA Aktif
             </span>
           </div>
         </header>

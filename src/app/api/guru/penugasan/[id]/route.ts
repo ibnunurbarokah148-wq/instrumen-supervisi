@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, requireGuru } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { evaluateSupervisi, generatePodcastAudio } from "@/lib/ai-evaluator";
+import { evaluateSupervisi, parseStructuredJawaban } from "@/lib/ai-evaluator";
 import { logActivity } from "@/lib/settings";
 
 export async function GET(
@@ -12,22 +12,34 @@ export async function GET(
   if (error) return error;
 
   const { id } = await context.params;
-  const penugasan = await prisma.penugasan.findUnique({
-    where: { id },
-    include: {
-      instrumen: {
-        include: {
-          pertanyaan: { orderBy: { urutan: "asc" } },
+  const [penugasan, perangkatTerbaru] = await Promise.all([
+    prisma.penugasan.findUnique({
+      where: { id },
+      include: {
+        guru: {
+          select: {
+            id: true,
+            nama: true,
+            nip: true,
+            mapel: true,
+            unitKerja: true,
+            nomorWA: true,
+          },
         },
-      },
-      jawaban: true,
-      hasil: {
-        include: {
-          podcast: true,
+        instrumen: {
+          include: {
+            pertanyaan: { orderBy: { urutan: "asc" } },
+          },
         },
+        jawaban: true,
+        hasil: true,
       },
-    },
-  });
+    }),
+    prisma.perangkatSupervisi.findFirst({
+      where: { guruId: session.userId },
+      orderBy: { updatedAt: "desc" },
+    }),
+  ]);
 
   if (!penugasan) {
     return NextResponse.json(
@@ -36,15 +48,17 @@ export async function GET(
     );
   }
 
-  // Pastikan guru hanya bisa melihat miliknya sendiri (PRD Bagian 2)
   if (penugasan.guruId !== session.userId) {
     return NextResponse.json(
-      { error: "Akses ditolak (403): Anda hanya dapat melihat data milik sendiri." },
+      {
+        error:
+          "Akses ditolak (403): Anda hanya dapat mengakses data supervisi milik sendiri.",
+      },
       { status: 403 }
     );
   }
 
-  return NextResponse.json({ penugasan });
+  return NextResponse.json({ penugasan, perangkatTerbaru });
 }
 
 export async function POST(
@@ -67,7 +81,7 @@ export async function POST(
             pertanyaan: { orderBy: { urutan: "asc" } },
           },
         },
-        hasil: { include: { podcast: true } },
+        hasil: true,
       },
     });
 
@@ -85,7 +99,45 @@ export async function POST(
       );
     }
 
-    // Simpan jawaban jika dikirim dalam payload
+    // Update progres RTL oleh Guru (pada laporan yang sudah memiliki RTL Pengawas)
+    if (action === "update_rtl_progres") {
+      if (!penugasan.hasil) {
+        return NextResponse.json(
+          { error: "Hasil supervisi tidak ditemukan." },
+          { status: 404 }
+        );
+      }
+      const rtlProgres = String(body.rtlProgres || "Sedang Berjalan");
+      const updatedHasil = await prisma.hasil.update({
+        where: { id: penugasan.hasil.id },
+        data: { rtlProgres },
+      });
+      await logActivity({
+        userId: session.userId,
+        namaUser: session.nama,
+        role: "guru",
+        aksi: "UPDATE_PROGRES_RTL",
+        detail: `${session.nama} memperbarui progres RTL menjadi "${rtlProgres}"`,
+      });
+      return NextResponse.json({
+        success: true,
+        hasil: updatedHasil,
+        message: `Progres Rencana Tindak Lanjut diperbarui menjadi: ${rtlProgres}`,
+      });
+    }
+
+    // Cegah perubahan instrumen jika laporan sudah disahkan (Immutable)
+    if (penugasan.hasil?.disahkan) {
+      return NextResponse.json(
+        {
+          error:
+            "Instrumen tidak dapat diubah karena laporan telah disahkan permanen (Immutable) oleh Kepala Sekolah.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // Simpan jawaban terstruktur ({ nilai, catatan, buktiUrl }) atau nilai sederhana
     const answers: Record<string, unknown> =
       body.answers && typeof body.answers === "object" ? body.answers : {};
 
@@ -107,9 +159,9 @@ export async function POST(
       });
     }
 
-    // 1. Simpan Draft Otomatis (PRD Bagian 6.2)
+    // 1. Simpan Draft Otomatis
     if (action === "draft") {
-      if (penugasan.status === "belum") {
+      if (penugasan.status === "belum" || penugasan.status === "perlu_revisi") {
         await prisma.penugasan.update({
           where: { id },
           data: { status: "draft" },
@@ -118,38 +170,96 @@ export async function POST(
       return NextResponse.json({
         success: true,
         savedAt: new Date().toISOString(),
-        message: "Draft berhasil disimpan otomatis.",
+        message: "Draf evaluasi diri tersimpan otomatis.",
       });
     }
 
-    // 2. Retry Evaluasi AI atau Podcast bila gagal (PRD Bagian 7.3 & 8)
+    // Validasi pertanyaan wajib untuk submit_verifikasi maupun submit (evaluasi AI)
+    if (action === "submit_verifikasi" || action === "submit") {
+      const savedJawaban = await prisma.jawaban.findMany({
+        where: { penugasanId: id },
+      });
+      const ansMap = new Map(
+        savedJawaban.map((j) => [j.pertanyaanId, parseStructuredJawaban(j.nilaiJSON)])
+      );
+
+      for (const q of penugasan.instrumen.pertanyaan) {
+        if (q.wajib) {
+          const parsed = ansMap.get(q.id);
+          if (
+            !parsed ||
+            parsed.nilai === undefined ||
+            parsed.nilai === null ||
+            String(parsed.nilai).trim() === ""
+          ) {
+            return NextResponse.json(
+              {
+                error: `Indikator wajib nomor ${q.urutan} pada aspek "${q.aspek}" belum diisi.`,
+              },
+              { status: 400 }
+            );
+          }
+        }
+      }
+    }
+
+    // 2. Ajukan Verifikasi ke Kepala Sekolah (tanpa wajib AI terlebih dahulu)
+    if (action === "submit_verifikasi") {
+      const latestPerangkat = await prisma.perangkatSupervisi.findFirst({
+        where: { guruId: session.userId },
+        orderBy: { updatedAt: "desc" },
+      });
+      const nextStatus =
+        latestPerangkat?.statusVerifikasi === "lengkap"
+          ? "dalam_penilaian"
+          : "menunggu_verifikasi";
+
+      await prisma.penugasan.update({
+        where: { id },
+        data: {
+          status: nextStatus,
+          catatanVerifikasi: null,
+        },
+      });
+
+      await logActivity({
+        userId: session.userId,
+        namaUser: session.nama,
+        role: "guru",
+        aksi: "AJUKAN_VERIFIKASI_SUPERVISI",
+        detail: `${session.nama} mengajukan evaluasi diri & bukti instrumen "${penugasan.instrumen.judul}" (Status: ${nextStatus})`,
+      });
+
+      return NextResponse.json({
+        success: true,
+        status: nextStatus,
+        penugasanId: id,
+        message:
+          nextStatus === "dalam_penilaian"
+            ? "Perangkat ajar sudah lengkap. Evaluasi diri diteruskan ke tahap Penilaian Kepala Sekolah."
+            : "Evaluasi diri berhasil diajukan untuk Verifikasi Kepala Sekolah.",
+      });
+    }
+
+    // 3. Retry Evaluasi AI Co-Evaluator
     if (action === "retry") {
       const rl = checkRateLimit(`ai:${session.userId}`, 10, 60_000);
       if (!rl.allowed) {
         return NextResponse.json(
           {
-            error: `Mohon tunggu ${rl.retryAfterSec} detik sebelum mencoba evaluasi ulang.`,
+            error: `Mohon tunggu ${rl.retryAfterSec} detik sebelum mencoba analisis ulang.`,
           },
           { status: 429 }
         );
       }
 
-      if (
-        penugasan.hasil &&
-        penugasan.hasil.status === "selesai" &&
-        penugasan.hasil.podcast?.status === "gagal"
-      ) {
-        const podRes = await generatePodcastAudio(penugasan.hasil.id);
-        return NextResponse.json({
-          success: podRes.success,
-          error: podRes.error,
-        });
-      }
-
-      const evalRes = await evaluateSupervisi(id);
+      const evalRes = await evaluateSupervisi(id, {
+        triggeredBy: "guru",
+        evaluatorName: session.nama,
+      });
       if (!evalRes.success) {
         return NextResponse.json(
-          { error: evalRes.error || "Evaluasi ulang gagal" },
+          { error: evalRes.error || "Analisis AI Co-Evaluator gagal." },
           { status: 500 }
         );
       }
@@ -159,48 +269,16 @@ export async function POST(
       });
     }
 
-    // 3. Submit Penuh & Jalankan Evaluasi AI + Podcast (PRD Bagian 6.2, 7, 8)
+    // 4. Submit & Susun Draf Analisis via AI Co-Evaluator untuk Kepala Sekolah
     if (action === "submit") {
       const rl = checkRateLimit(`ai:${session.userId}`, 10, 60_000);
       if (!rl.allowed) {
         return NextResponse.json(
           {
-            error: `Terlalu banyak permintaan evaluasi AI. Silakan tunggu ${rl.retryAfterSec} detik.`,
+            error: `Terlalu banyak permintaan analisis AI. Silakan tunggu ${rl.retryAfterSec} detik.`,
           },
           { status: 429 }
         );
-      }
-
-      const savedJawaban = await prisma.jawaban.findMany({
-        where: { penugasanId: id },
-      });
-      const ansMap = new Map(
-        savedJawaban.map((j) => {
-          try {
-            return [j.pertanyaanId, JSON.parse(j.nilaiJSON)];
-          } catch {
-            return [j.pertanyaanId, j.nilaiJSON];
-          }
-        })
-      );
-
-      // Validasi pertanyaan wajib sebelum submit
-      for (const q of penugasan.instrumen.pertanyaan) {
-        if (q.wajib) {
-          const val = ansMap.get(q.id);
-          if (
-            val === undefined ||
-            val === null ||
-            String(val).trim() === ""
-          ) {
-            return NextResponse.json(
-              {
-                error: `Pertanyaan wajib nomor ${q.urutan} pada aspek "${q.aspek}" belum diisi.`,
-              },
-              { status: 400 }
-            );
-          }
-        }
       }
 
       await logActivity({
@@ -208,16 +286,19 @@ export async function POST(
         namaUser: session.nama,
         role: "guru",
         aksi: "SUBMIT_INSTRUMEN",
-        detail: `${session.nama} mengirim jawaban instrumen "${penugasan.instrumen.judul}"`,
+        detail: `${session.nama} mengirim evaluasi diri instrumen "${penugasan.instrumen.judul}" untuk analisis AI Co-Evaluator & penilaian Kepala Sekolah`,
       });
 
-      const evalRes = await evaluateSupervisi(id);
+      const evalRes = await evaluateSupervisi(id, {
+        triggeredBy: "guru",
+        evaluatorName: session.nama,
+      });
       if (!evalRes.success) {
         return NextResponse.json(
           {
             error:
               evalRes.error ||
-              "Terjadi kendala saat mengevaluasi dengan AI. Anda dapat menekan tombol Coba Lagi.",
+              "Kendala menyusun draf analisis AI. Jawaban tetap tersimpan — Anda dapat langsung menekan 'Ajukan Verifikasi ke Kepala Sekolah' tanpa AI.",
             hasilId: evalRes.hasilId,
           },
           { status: 500 }

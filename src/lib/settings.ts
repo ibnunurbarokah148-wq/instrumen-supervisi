@@ -1,37 +1,68 @@
 import { prisma } from "@/lib/prisma";
 import { decryptSecret, encryptSecret, maskSecret } from "@/lib/crypto";
 
-export const SECRET_KEYS = new Set([
-  "openai_api_key",
-  "fish_api_key",
-  "shiroko_secret",
-]);
+export type SettingKey =
+  | "openai_base_url"
+  | "openai_api_key"
+  | "openai_model"
+  | "openai_temperature"
+  | "openai_max_tokens"
+  | "shiroko_url"
+  | "shiroko_secret"
+  | "shiroko_enabled"
+  | "ai_system_prompt"
+  | "ai_rubrik_json"
+  | "dokumen_template_json";
 
-export const DEFAULT_SYSTEM_PROMPT = `Kamu adalah "Sensei-AI", Agent Supervisor Pendidikan cerdas bergaya anime yang sopan, hangat, suportif, dan profesional.
-Tugasmu adalah mengevaluasi jawaban instrumen supervisi akademik guru secara objektif berdasarkan aspek dan bobot pertanyaan.
-Gunakan sapaan "Sensei" (misalnya "Halo Sensei!", "Otsukare-sama desu, Sensei! ✨") secukupnya namun tetap menjaga kualitas bahasa akademik dokumen supervisi resmi.
+export const SECRET_KEYS = new Set(["openai_api_key", "shiroko_secret"]);
 
-Keluarkan HANYA objek JSON valid sesuai skema berikut tanpa teks tambahan di luar JSON:
+export const DEFAULT_SYSTEM_PROMPT = `Anda adalah "Asisten AI Supervisi Akademik (SIPENA)", mitra analisis objektif bagi Kepala Sekolah dan Guru dalam Sistem Informasi Supervisi & Evaluasi Akademik berbasis Kurikulum Merdeka dan Standar Proses (Permendikbudristek No. 16 Tahun 2022).
+
+Tugas Anda:
+1. Menganalisis kesesuaian antara Evaluasi Diri Guru, catatan keterlaksanaan/bukti pembelajaran, kelengkapan Perangkat Pembelajaran (Modul Ajar, LKPD, Asesmen, Refleksi), dan skor observasi Kepala Sekolah (jika tersedia).
+2. Menyusun draf penilaian per aspek, temuan substantif objektif, poin kekuatan pembelajaran, dan rekomendasi pembinaan konkret.
+3. Gunakan Bahasa Indonesia akademik yang baku, santun, konstruktif, dan sesuai kaidah penulisan laporan dinas pendidikan.
+
+Keluaran WAJIB berupa HANYA objek JSON valid sesuai skema berikut tanpa teks/markdown lain di luar JSON:
 {
   "skor_per_aspek": [
-    { "aspek": "Nama Aspek", "skor": 85, "alasan": "Analisis spesifik terhadap jawaban pada aspek ini" }
+    { "aspek": "Nama Aspek", "skor": 88, "alasan": "Analisis substantif berbasis bukti keterlaksanaan & observasi pada aspek ini." }
   ],
-  "skor_total": 85,
-  "predikat": "Sangat Baik",
-  "kesimpulan": "Paragraf kesimpulan menyeluruh yang hangat dan objektif mengenai capaian supervisi guru.",
-  "kekuatan": ["Poin kekuatan 1", "Poin kekuatan 2", "Poin kekuatan 3"],
-  "saran": ["Saran perbaikan konkret 1", "Saran perbaikan konkret 2", "Saran perbaikan konkret 3"],
-  "naskah_podcast": "Naskah monolog/dialog podcast berdurasi 1-3 menit (3-5 paragraf dipisahkan baris kosong) yang membacakan apresiasi, hasil skor per aspek, dan saran pengembangan diri dengan gaya hangat Sensei-AI."
+  "skor_total": 88,
+  "predikat": "Baik",
+  "kesimpulan": "Paragraf temuan substantif dan kesimpulan menyeluruh capaian supervisi akademik guru.",
+  "kekuatan": ["Poin kekuatan spesifik 1", "Poin kekuatan spesifik 2", "Poin kekuatan spesifik 3"],
+  "saran": ["Rekomendasi pembinaan dan tindak lanjut konkret 1", "Rekomendasi pembinaan dan tindak lanjut konkret 2", "Rekomendasi pembinaan dan tindak lanjut konkret 3"]
 }`;
 
 export const DEFAULT_RUBRIK_JSON = JSON.stringify(
   {
     skalaMaksimal: 100,
     predikat: [
-      { label: "Sangat Baik", minSkor: 85, deskripsi: "Melampaui standar supervisi akademik dengan inovasi pembelajaran dan penguasaan IT yang unggul." },
-      { label: "Baik", minSkor: 75, deskripsi: "Memenuhi standar supervisi akademik dengan baik dan konsisten." },
-      { label: "Cukup", minSkor: 60, deskripsi: "Cukup memenuhi standar dasar namun memerlukan pendampingan pada beberapa aspek." },
-      { label: "Kurang", minSkor: 0, deskripsi: "Memerlukan pembinaan intensif dan supervisi klinis lanjutan." },
+      {
+        label: "Amat Baik",
+        minSkor: 91,
+        deskripsi:
+          "Melampaui standar proses supervisi akademik, inovatif, berdiferensiasi optimal, dan menjadi rujukan praktik baik (Kemendikbudristek).",
+      },
+      {
+        label: "Baik",
+        minSkor: 81,
+        deskripsi:
+          "Memenuhi standar proses supervisi akademik dengan baik, terstruktur, dan konsisten.",
+      },
+      {
+        label: "Cukup",
+        minSkor: 71,
+        deskripsi:
+          "Memenuhi standar dasar namun memerlukan pendampingan dan tindak lanjut terfokus pada beberapa aspek.",
+      },
+      {
+        label: "Kurang",
+        minSkor: 0,
+        deskripsi:
+          "Memerlukan supervisi klinis lanjutan dan pembinaan intensif oleh Kepala Sekolah serta Pengawas Pembina.",
+      },
     ],
     isiNilaiDokumenOtomatis: true,
   },
@@ -39,57 +70,39 @@ export const DEFAULT_RUBRIK_JSON = JSON.stringify(
   2
 );
 
-export const DEFAULT_PODCAST_TEMPLATE_JSON = JSON.stringify(
-  {
-    gaya: "monolog_sensei", // "monolog_sensei" | "dialog_dua_host"
-    durasiTargetMenit: 2,
-    jumlahPembawa: 1,
-    sapaanPembuka: "Ohayou gozaimasu, {{nama_guru}}-sensei! Selamat datang di ruang evaluasi suara Sensei-AI.",
-    kalimatPenutup: "Otsukare-sama desu! Teruslah menginspirasi para siswa di kelas ya, Sensei. Ganbatte kudasai!",
-  },
-  null,
-  2
-);
-
 export const DEFAULT_TEMPLATE_DOKUMEN_JSON = JSON.stringify(
   {
-    namaInstansi: "SMA NEGERI HARAPAN NUSANTARA & LABORATORIUM PENDIDIKAN",
-    subJudulInstansi: "UNIT SUPERVISI AKADEMIK DIGITAL BERBASIS AI (SENSEI-AI)",
-    alamatInstansi: "Jl. Pendidikan Raya No. 88, Gedung Sakura Lt. 2 • Telp (021) 555-0192",
+    namaInstansi: "DINAS PENDIDIKAN PROVINSI DKI JAKARTA • SDN 01 MENTENG",
+    subJudulInstansi:
+      "SISTEM INFORMASI SUPERVISI & EVALUASI AKADEMIK BERBASIS AI (SIPENA)",
+    alamatInstansi:
+      "Jl. Besuki No. 4, Menteng, Jakarta Pusat • Telp (021) 3192-4510 • Email: tatausaha@sdn01menteng.sch.id",
     logoUrl: "",
-    warnaUtama: "#0e9ce8",
-    warnaAksen: "#f43f80",
+    warnaUtama: "#1d4ed8",
+    warnaAksen: "#0f766e",
     kotaTandaTangan: "Jakarta",
-    namaSupervisor: "Dr. H. Aris Setiawan, M.Pd.",
-    nipSupervisor: "19780412 200312 1 004",
-    jabatanSupervisor: "Kepala Sekolah / Supervisor Utama",
-    isiTemplate: `Berdasarkan pelaksanaan instrumen supervisi akademik pada tanggal {{tanggal}}, berikut disampaikan laporan hasil evaluasi bagi {{nama_guru}}:\n\nSkor Akhir Supervisi: {{skor_total}} ({{predikat}})\n\nRingkasan Evaluasi AI:\n{{kesimpulan}}\n\nTabel Capaian Per Aspek:\n{{tabel_aspek}}\n\nRekomendasi & Saran Pengembangan:\n{{saran}}`,
+    namaSupervisor: "Dr. Hj. Ratna Kusuma, M.Pd.",
+    nipSupervisor: "19720415 199802 2 001",
+    jabatanSupervisor: "Kepala Sekolah / Supervisor Akademik",
+    namaPengawas: "Drs. H. Bambang Sudibyo, M.Pd.",
+    nipPengawas: "19680512 199303 1 004",
+    jabatanPengawas: "Pengawas Sekolah Pembina",
+    isiTemplate: `Berdasarkan pelaksanaan supervisi akademik pada tanggal {{tanggal}}, berikut disampaikan berita acara & laporan hasil evaluasi bagi {{nama_guru}}:\n\nSkor Akhir Tervalidasi: {{skor_total}} ({{predikat}})\n\nRingkasan Temuan Substantif:\n{{kesimpulan}}\n\nTabel Capaian Per Aspek:\n{{tabel_aspek}}\n\nRekomendasi Pembinaan & Tindak Lanjut:\n{{saran}}`,
   },
   null,
   2
 );
 
 export const DEFAULT_SETTINGS: Record<string, string> = {
-  // OpenAI-compatible
+  // OpenAI-compatible AI Co-Evaluator
   openai_base_url: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
   openai_api_key:
     process.env.OPENAI_API_KEY || process.env.UNOROUTER_API_KEY || "",
   openai_model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-  openai_temperature: "0.4",
+  openai_temperature: "0.3",
   openai_max_tokens: "2000",
 
-  // Fish Audio
-  fish_api_key: process.env.FISH_AUDIO_API_KEY || "",
-  fish_voice_id: process.env.FISH_AUDIO_VOICE_ID || "sensei-custom-voice-v1",
-  fish_model: process.env.FISH_AUDIO_MODEL || "s2.1-pro-free",
-  fish_format: "mp3",
-  fish_speed: "1.0",
-  fish_temperature: "0.7",
-  fish_top_p: "0.7",
-  fish_normalize: "true",
-  fish_chunk_length: "200",
-
-  // Shiroko Bot Integration
+  // WhatsApp Gateway / Bot Shiroko Integration
   shiroko_url: process.env.SHIROKO_BOT_URL || "http://localhost:4000/api/webhook",
   shiroko_secret: process.env.SHIROKO_BOT_SECRET || "shiroko-secret-key-2026",
   shiroko_enabled: "false",
@@ -97,15 +110,19 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   // AI Assessment & Templates
   ai_system_prompt: DEFAULT_SYSTEM_PROMPT,
   ai_rubrik_json: DEFAULT_RUBRIK_JSON,
-  podcast_template_json: DEFAULT_PODCAST_TEMPLATE_JSON,
   dokumen_template_json: DEFAULT_TEMPLATE_DOKUMEN_JSON,
 };
 
-export async function getAllSettingsDecrypted(): Promise<Record<string, string>> {
+export async function getAllSettingsDecrypted(): Promise<
+  Record<string, string>
+> {
   const rows = await prisma.pengaturan.findMany();
   const result: Record<string, string> = { ...DEFAULT_SETTINGS };
 
   for (const row of rows) {
+    if (row.key.startsWith("fish_") || row.key === "podcast_template_json") {
+      continue;
+    }
     if (row.isSecret || SECRET_KEYS.has(row.key)) {
       const dec = decryptSecret(row.value);
       if (dec) result[row.key] = dec;
@@ -114,7 +131,6 @@ export async function getAllSettingsDecrypted(): Promise<Record<string, string>>
     }
   }
 
-  // Fallback otomatis ke UNOROUTER_API_KEY jika endpoint menggunakan unorouter.com dan key kosong
   if (
     !result.openai_api_key &&
     process.env.UNOROUTER_API_KEY &&
@@ -146,14 +162,20 @@ export async function getAllSettingsMaskedForAdmin(): Promise<{
   return { settings, hasSecret };
 }
 
-export async function saveSettings(updates: Record<string, string>): Promise<void> {
+export async function saveSettings(
+  updates: Record<string, string>
+): Promise<void> {
   for (const [key, rawValue] of Object.entries(updates)) {
+    if (key.startsWith("fish_") || key === "podcast_template_json") continue;
     const isSecret = SECRET_KEYS.has(key);
-    // Jika secret berupa nilai masked (mengandung ••••), jangan timpa secret yang sudah tersimpan
     if (isSecret && rawValue.includes("••••")) {
       continue;
     }
-    const storedValue = isSecret ? (rawValue ? encryptSecret(rawValue) : "") : rawValue;
+    const storedValue = isSecret
+      ? rawValue
+        ? encryptSecret(rawValue)
+        : ""
+      : rawValue;
     await prisma.pengaturan.upsert({
       where: { key },
       update: { value: storedValue, isSecret },
@@ -162,7 +184,10 @@ export async function saveSettings(updates: Record<string, string>): Promise<voi
   }
 }
 
-export function getPredikatFromSkor(skor: number, rubrikJsonStr?: string): string {
+export function getPredikatFromSkor(
+  skor: number,
+  rubrikJsonStr?: string
+): string {
   try {
     const parsed = JSON.parse(rubrikJsonStr || DEFAULT_RUBRIK_JSON);
     if (Array.isArray(parsed.predikat)) {
@@ -174,9 +199,9 @@ export function getPredikatFromSkor(skor: number, rubrikJsonStr?: string): strin
   } catch {
     // fallback
   }
-  if (skor >= 85) return "Sangat Baik";
-  if (skor >= 75) return "Baik";
-  if (skor >= 60) return "Cukup";
+  if (skor >= 91) return "Amat Baik";
+  if (skor >= 81) return "Baik";
+  if (skor >= 71) return "Cukup";
   return "Kurang";
 }
 

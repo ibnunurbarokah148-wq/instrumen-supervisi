@@ -34,6 +34,17 @@ export interface ExportHasilData {
   skorPerAspek: { aspek: string; skor: number; alasan: string }[];
   catatanAdmin?: string | null;
   diubahAdminOleh?: string | null;
+  disahkan?: boolean;
+  disahkanOleh?: string | null;
+  disahkanNip?: string | null;
+  disahkanPada?: string | null;
+  nomorRegistrasi?: string | null;
+  rtlRekomendasi?: string | null;
+  rtlTarget?: string | null;
+  rtlTenggat?: string | null;
+  rtlProgres?: string | null;
+  pengawasNama?: string | null;
+  pengawasNip?: string | null;
 }
 
 export interface DokumenTemplateConfig {
@@ -47,6 +58,9 @@ export interface DokumenTemplateConfig {
   namaSupervisor: string;
   nipSupervisor: string;
   jabatanSupervisor: string;
+  namaPengawas: string;
+  nipPengawas: string;
+  jabatanPengawas: string;
   isiTemplate: string;
 }
 
@@ -54,21 +68,26 @@ export function parseTemplateConfig(rawJson?: string): DokumenTemplateConfig {
   try {
     const parsed = JSON.parse(rawJson || DEFAULT_TEMPLATE_DOKUMEN_JSON);
     return {
-      namaInstansi: parsed.namaInstansi || "SMA NEGERI HARAPAN NUSANTARA",
+      namaInstansi:
+        parsed.namaInstansi ||
+        "DINAS PENDIDIKAN PROVINSI DKI JAKARTA • SDN 01 MENTENG",
       subJudulInstansi:
         parsed.subJudulInstansi ||
-        "UNIT SUPERVISI AKADEMIK DIGITAL BERBASIS AI (SENSEI-AI)",
+        "SISTEM INFORMASI SUPERVISI & EVALUASI AKADEMIK BERBASIS AI (SIPENA)",
       alamatInstansi:
         parsed.alamatInstansi ||
-        "Jl. Pendidikan Raya No. 88, Gedung Sakura Lt. 2",
+        "Jl. Besuki No. 4, Menteng, Jakarta Pusat • Telp (021) 3192-4510",
       logoUrl: parsed.logoUrl || "",
-      warnaUtama: parsed.warnaUtama || "#0e9ce8",
-      warnaAksen: parsed.warnaAksen || "#f43f80",
+      warnaUtama: parsed.warnaUtama || "#1d4ed8",
+      warnaAksen: parsed.warnaAksen || "#0f766e",
       kotaTandaTangan: parsed.kotaTandaTangan || "Jakarta",
-      namaSupervisor: parsed.namaSupervisor || "Dr. H. Aris Setiawan, M.Pd.",
-      nipSupervisor: parsed.nipSupervisor || "19780412 200312 1 004",
+      namaSupervisor: parsed.namaSupervisor || "Dr. Hj. Ratna Kusuma, M.Pd.",
+      nipSupervisor: parsed.nipSupervisor || "19720415 199802 2 001",
       jabatanSupervisor:
-        parsed.jabatanSupervisor || "Kepala Sekolah / Supervisor Utama",
+        parsed.jabatanSupervisor || "Kepala Sekolah / Supervisor Akademik",
+      namaPengawas: parsed.namaPengawas || "Drs. H. Bambang Sudibyo, M.Pd.",
+      nipPengawas: parsed.nipPengawas || "19680512 199303 1 004",
+      jabatanPengawas: parsed.jabatanPengawas || "Pengawas Sekolah Pembina",
       isiTemplate: parsed.isiTemplate || "",
     };
   } catch {
@@ -78,10 +97,10 @@ export function parseTemplateConfig(rawJson?: string): DokumenTemplateConfig {
 
 function hexToRgb(hex: string): [number, number, number] {
   const clean = hex.replace("#", "");
-  if (clean.length !== 6) return [14, 156, 232];
-  const r = parseInt(clean.slice(0, 2), 16) || 14;
-  const g = parseInt(clean.slice(2, 4), 16) || 156;
-  const b = parseInt(clean.slice(4, 6), 16) || 232;
+  if (clean.length !== 6) return [29, 78, 216];
+  const r = parseInt(clean.slice(0, 2), 16) || 29;
+  const g = parseInt(clean.slice(2, 4), 16) || 78;
+  const b = parseInt(clean.slice(4, 6), 16) || 216;
   return [r, g, b];
 }
 
@@ -94,52 +113,70 @@ export function generatePdfBuffer(
   const primaryRgb = hexToRgb(tpl.warnaUtama);
   const accentRgb = hexToRgb(tpl.warnaAksen);
 
-  // Header / Kop Surat
+  const noReg =
+    data.nomorRegistrasi || `REG-SUP/2026/${data.id.slice(-6).toUpperCase()}`;
+  const statusPengesahan = data.disahkan
+    ? `DISAHKAN & TERKUNCI (${data.disahkanOleh || tpl.namaSupervisor})`
+    : "DRAF EVALUASI (MENUNGGU PENGESAHAN KEPALA SEKOLAH)";
+
+  // Header / Kop Surat Resmi
   doc.setFillColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
-  doc.rect(0, 0, 210, 6, "F");
+  doc.rect(0, 0, 210, 5.5, "F");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
+  doc.setFontSize(12.5);
   doc.setTextColor(15, 23, 42);
-  doc.text(tpl.namaInstansi.toUpperCase(), 105, 16, { align: "center" });
+  doc.text(tpl.namaInstansi.toUpperCase(), 105, 14, { align: "center" });
 
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
   doc.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
-  doc.text(tpl.subJudulInstansi, 105, 22, { align: "center" });
+  doc.text(tpl.subJudulInstansi, 105, 19.5, { align: "center" });
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
-  doc.text(tpl.alamatInstansi, 105, 27, { align: "center" });
+  doc.text(tpl.alamatInstansi, 105, 24.5, { align: "center" });
 
   doc.setDrawColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
-  doc.setLineWidth(0.7);
-  doc.line(15, 31, 195, 31);
+  doc.setLineWidth(0.75);
+  doc.line(15, 28, 195, 28);
   doc.setLineWidth(0.2);
-  doc.line(15, 32.2, 195, 32.2);
+  doc.line(15, 29.2, 195, 29.2);
 
-  // Judul Dokumen
+  // Judul & Nomor Registrasi
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
+  doc.setFontSize(11.5);
   doc.setTextColor(15, 23, 42);
-  doc.text("LAPORAN HASIL SUPERVISI AKADEMIK GURU", 105, 40, {
+  doc.text("BERITA ACARA & LAPORAN HASIL SUPERVISI AKADEMIK", 105, 36.5, {
+    align: "center",
+  });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`No. Registrasi: ${noReg}   |   Status: ${statusPengesahan}`, 105, 41, {
     align: "center",
   });
 
   // Identitas Guru & Ringkasan Skor
   autoTable(doc, {
-    startY: 45,
+    startY: 44.5,
     theme: "grid",
-    styles: { fontSize: 9, cellPadding: 2.5 },
+    styles: { fontSize: 8.5, cellPadding: 2.2 },
     columnStyles: {
-      0: { fontStyle: "bold", fillColor: [240, 248, 255], cellWidth: 38 },
-      1: { cellWidth: 62 },
-      2: { fontStyle: "bold", fillColor: [255, 241, 245], cellWidth: 35 },
-      3: { cellWidth: 45 },
+      0: { fontStyle: "bold", fillColor: [239, 246, 255], cellWidth: 36 },
+      1: { cellWidth: 64 },
+      2: { fontStyle: "bold", fillColor: [240, 253, 250], cellWidth: 34 },
+      3: { cellWidth: 46 },
     },
     body: [
       ["Nama Guru", data.namaGuru, "Tanggal Evaluasi", data.tanggalEvaluasi],
-      ["NIP / Email", data.nipGuru || data.emailGuru, "Skor Akhir", `${data.skorTotal} / 100`],
+      [
+        "NIP / Email",
+        data.nipGuru || data.emailGuru,
+        "Skor Akhir",
+        `${data.skorTotal} / 100`,
+      ],
       [
         "Mata Pelajaran",
         data.mapelGuru || "Umum",
@@ -149,117 +186,118 @@ export function generatePdfBuffer(
       [
         "Instrumen",
         `${data.judulInstrumen} (v${data.versiInstrumen})`,
-        "Evaluator",
-        "Sensei-AI Supervisor",
+        "Verifikasi",
+        data.disahkan ? "Tervalidasi Kepsek" : "Proses Review",
       ],
     ],
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let curY = (doc as any).lastAutoTable.finalY + 8;
+  let curY = (doc as any).lastAutoTable.finalY + 7;
 
-  // Grafik Batang Visual Capaian Per Aspek (Server-Rendered Chart)
+  // 1. Grafik & Tabel Capaian Per Aspek
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
   doc.setTextColor(15, 23, 42);
-  doc.text("1. Grafik & Tabel Capaian Per Aspek Penilaian", 15, curY);
-  curY += 5;
+  doc.text("1. Capaian & Analisis Per Aspek Penilaian", 15, curY);
+  curY += 4.5;
 
   for (const item of data.skorPerAspek) {
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(8);
     doc.setTextColor(51, 65, 85);
-    doc.text(`${item.aspek}`, 16, curY + 3.5);
+    doc.text(`${item.aspek}`, 16, curY + 3.2);
 
-    // Bar track
     doc.setFillColor(226, 232, 240);
-    doc.roundedRect(62, curY, 110, 4.5, 1.5, 1.5, "F");
+    doc.roundedRect(68, curY, 104, 4, 1.2, 1.2, "F");
 
-    // Bar fill
-    const barWidth = Math.max(4, Math.min(110, (item.skor / 100) * 110));
-    if (item.skor >= 85) {
-      doc.setFillColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
-    } else if (item.skor >= 75) {
+    const barWidth = Math.max(4, Math.min(104, (item.skor / 100) * 104));
+    if (item.skor >= 91) {
       doc.setFillColor(16, 185, 129);
+    } else if (item.skor >= 81) {
+      doc.setFillColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
+    } else if (item.skor >= 71) {
+      doc.setFillColor(245, 158, 11);
     } else {
-      doc.setFillColor(accentRgb[0], accentRgb[1], accentRgb[2]);
+      doc.setFillColor(225, 29, 72);
     }
-    doc.roundedRect(62, curY, barWidth, 4.5, 1.5, 1.5, "F");
+    doc.roundedRect(68, curY, barWidth, 4, 1.2, 1.2, "F");
 
     doc.setFont("helvetica", "bold");
-    doc.text(`${item.skor}/100`, 175, curY + 3.5);
-    curY += 7;
+    doc.text(`${item.skor}/100`, 175, curY + 3.2);
+    curY += 6;
   }
 
   curY += 2;
 
-  // Tabel Detail Alasan per Aspek
   autoTable(doc, {
     startY: curY,
-    head: [["Aspek Penilaian", "Skor", "Analisis & Evaluasi Sensei-AI"]],
+    head: [
+      ["Aspek Penilaian", "Skor", "Analisis Substantif (AI & Kepala Sekolah)"],
+    ],
     body: data.skorPerAspek.map((a) => [a.aspek, `${a.skor}`, a.alasan]),
     theme: "striped",
     headStyles: {
       fillColor: primaryRgb,
       textColor: [255, 255, 255],
-      fontSize: 9,
+      fontSize: 8.5,
     },
-    styles: { fontSize: 8.5, cellPadding: 2.5 },
+    styles: { fontSize: 8, cellPadding: 2.2 },
     columnStyles: {
-      0: { fontStyle: "bold", cellWidth: 38 },
-      1: { halign: "center", fontStyle: "bold", cellWidth: 18 },
-      2: { cellWidth: 124 },
+      0: { fontStyle: "bold", cellWidth: 42 },
+      1: { halign: "center", fontStyle: "bold", cellWidth: 16 },
+      2: { cellWidth: 122 },
     },
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  curY = (doc as any).lastAutoTable.finalY + 7;
+  curY = (doc as any).lastAutoTable.finalY + 6;
 
-  // Kesimpulan AI
+  // 2. Temuan Substantif / Kesimpulan Evaluasi
   if (curY > 235) {
     doc.addPage();
-    curY = 20;
+    curY = 18;
   }
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
   doc.setTextColor(15, 23, 42);
-  doc.text("2. Kesimpulan Evaluasi", 15, curY);
-  curY += 5;
+  doc.text("2. Temuan Substantif & Kesimpulan Supervisi", 15, curY);
+  curY += 4.5;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(51, 65, 85);
-  const kesimpulanLines = doc.splitTextToSize(data.kesimpulan, 180);
+  const kesimpulanLines = doc.splitTextToSize(data.kesimpulan || "-", 180);
   doc.text(kesimpulanLines, 15, curY);
-  curY += kesimpulanLines.length * 4.5 + 4;
+  curY += kesimpulanLines.length * 4.2 + 4;
 
-  // Kekuatan & Saran Perbaikan
-  if (curY > 230) {
+  // 3. Kekuatan & Saran Pembinaan
+  if (curY > 225) {
     doc.addPage();
-    curY = 20;
+    curY = 18;
   }
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
   doc.setTextColor(15, 23, 42);
-  doc.text("3. Poin Kekuatan & Rekomendasi Tindak Lanjut", 15, curY);
-  curY += 4;
+  doc.text("3. Poin Kekuatan & Rekomendasi Pembinaan", 15, curY);
+  curY += 3.5;
 
   autoTable(doc, {
     startY: curY,
-    head: [["Kekuatan Utama", "Saran Perbaikan & Pengembangan"]],
+    head: [["Kekuatan Utama Pembelajaran", "Rekomendasi Pembinaan Kepala Sekolah"]],
     body: [
       [
-        data.kekuatan.map((k, idx) => `${idx + 1}. ${k}`).join("\n\n"),
-        data.saran.map((s, idx) => `${idx + 1}. ${s}`).join("\n\n"),
+        data.kekuatan.map((k, idx) => `${idx + 1}. ${k}`).join("\n\n") || "-",
+        data.saran.map((s, idx) => `${idx + 1}. ${s}`).join("\n\n") || "-",
       ],
     ],
     theme: "grid",
     headStyles: {
-      fillColor: [51, 65, 85],
+      fillColor: [30, 41, 59],
       textColor: [255, 255, 255],
-      fontSize: 9,
+      fontSize: 8.5,
     },
-    styles: { fontSize: 8.5, cellPadding: 3 },
+    styles: { fontSize: 8, cellPadding: 2.5 },
     columnStyles: {
       0: { cellWidth: 90 },
       1: { cellWidth: 90 },
@@ -267,55 +305,126 @@ export function generatePdfBuffer(
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  curY = (doc as any).lastAutoTable.finalY + 6;
+  curY = (doc as any).lastAutoTable.finalY + 5;
 
-  // Catatan Admin (jika ada)
+  // Catatan Observasi Kepala Sekolah
   if (data.catatanAdmin) {
     if (curY > 240) {
       doc.addPage();
-      curY = 20;
+      curY = 18;
     }
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
+    doc.setFontSize(9);
     doc.setTextColor(accentRgb[0], accentRgb[1], accentRgb[2]);
     doc.text(
-      `Catatan Supervisor / Admin ${data.diubahAdminOleh ? `(${data.diubahAdminOleh})` : ""}:`,
+      `4. Catatan Resmi Kepala Sekolah ${
+        data.diubahAdminOleh ? `(${data.diubahAdminOleh})` : ""
+      }:`,
       15,
       curY
     );
-    curY += 4.5;
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(8.8);
+    curY += 4.2;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
     doc.setTextColor(51, 65, 85);
     const catLines = doc.splitTextToSize(data.catatanAdmin, 180);
     doc.text(catLines, 15, curY);
-    curY += catLines.length * 4.5 + 4;
+    curY += catLines.length * 4.2 + 4;
   }
 
-  // Tanda Tangan
+  // 5. Rencana Tindak Lanjut (RTL) Pengawas Sekolah
+  if (curY > 218) {
+    doc.addPage();
+    curY = 18;
+  }
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(
+    "5. Rencana Tindak Lanjut (RTL) & Peninjauan Pengawas Sekolah",
+    15,
+    curY
+  );
+  curY += 3.5;
+
+  autoTable(doc, {
+    startY: curY,
+    theme: "grid",
+    styles: { fontSize: 8, cellPadding: 2.3 },
+    columnStyles: {
+      0: { fontStyle: "bold", fillColor: [241, 245, 249], cellWidth: 46 },
+      1: { cellWidth: 134 },
+    },
+    body: [
+      [
+        "Rekomendasi Pengawas",
+        data.rtlRekomendasi ||
+          "Menunggu peninjauan & penetapan RTL oleh Pengawas Sekolah Pembina.",
+      ],
+      ["Target Peningkatan Mutu", data.rtlTarget || "-"],
+      [
+        "Tenggat & Progres RTL",
+        data.rtlTenggat
+          ? `Tenggat: ${data.rtlTenggat}  |  Status Progres: ${
+              data.rtlProgres || "Belum Dimulai"
+            }`
+          : `Status Progres: ${data.rtlProgres || "Belum Dimulai"}`,
+      ],
+      [
+        "Pengawas Pembina",
+        data.pengawasNama
+          ? `${data.pengawasNama} (NIP. ${data.pengawasNip || tpl.nipPengawas})`
+          : `${tpl.namaPengawas} (NIP. ${tpl.nipPengawas})`,
+      ],
+    ],
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  curY = (doc as any).lastAutoTable.finalY + 8;
+
+  // 6. Blok Tanda Tangan Resmi 3 Pihak
   if (curY > 240) {
     doc.addPage();
-    curY = 25;
-  } else {
-    curY += 6;
+    curY = 22;
   }
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(15, 23, 42);
 
-  doc.text("Guru yang Disupervisi,", 30, curY);
-  doc.text(`${tpl.kotaTandaTangan}, ${data.tanggalEvaluasi}`, 135, curY);
-  doc.text(tpl.jabatanSupervisor, 135, curY + 4.5);
+  // Kolom 1: Guru yang Disupervisi
+  doc.text("Mengetahui / Yang Disupervisi,", 16, curY);
+  doc.text("Guru Mata Pelajaran / Kelas,", 16, curY + 4.2);
+
+  // Kolom 2: Pengawas Sekolah Pembina
+  doc.text("Mengetahui & Membina,", 78, curY);
+  doc.text(tpl.jabatanPengawas, 78, curY + 4.2);
+
+  // Kolom 3: Kepala Sekolah
+  doc.text(`${tpl.kotaTandaTangan}, ${data.tanggalEvaluasi}`, 138, curY);
+  doc.text(tpl.jabatanSupervisor, 138, curY + 4.2);
 
   doc.setFont("helvetica", "bold");
-  doc.text(data.namaGuru, 30, curY + 24);
-  doc.text(tpl.namaSupervisor, 135, curY + 24);
+  doc.setFontSize(8.5);
+  doc.text(data.namaGuru, 16, curY + 23);
+  doc.text(data.pengawasNama || tpl.namaPengawas, 78, curY + 23);
+  doc.text(data.disahkanOleh || tpl.namaSupervisor, 138, curY + 23);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text(`NIP: ${data.nipGuru || "-"}`, 30, curY + 28.5);
-  doc.text(`NIP: ${tpl.nipSupervisor}`, 135, curY + 28.5);
+  doc.setFontSize(7.5);
+  doc.text(`NIP. ${data.nipGuru || "-"}`, 16, curY + 27);
+  doc.text(`NIP. ${data.pengawasNip || tpl.nipPengawas}`, 78, curY + 27);
+  doc.text(`NIP. ${data.disahkanNip || tpl.nipSupervisor}`, 138, curY + 27);
+
+  // Footer Verifikasi Digital
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    `Dokumen Resmi SIPENA • No. Reg: ${noReg} • Dihasilkan secara elektronik dan dapat diverifikasi melalui Portal Supervisi Akademik.`,
+    105,
+    289,
+    { align: "center" }
+  );
 
   const arrayBuffer = doc.output("arraybuffer");
   return Buffer.from(arrayBuffer);
@@ -326,6 +435,8 @@ export async function generateWordBuffer(
   rawTemplateJson?: string
 ): Promise<Buffer> {
   const tpl = parseTemplateConfig(rawTemplateJson);
+  const noReg =
+    data.nomorRegistrasi || `REG-SUP/2026/${data.id.slice(-6).toUpperCase()}`;
 
   const aspectRows = data.skorPerAspek.map(
     (item) =>
@@ -335,7 +446,9 @@ export async function generateWordBuffer(
             width: { size: 28, type: WidthType.PERCENTAGE },
             children: [
               new Paragraph({
-                children: [new TextRun({ text: item.aspek, bold: true, size: 20 })],
+                children: [
+                  new TextRun({ text: item.aspek, bold: true, size: 20 }),
+                ],
               }),
             ],
           }),
@@ -345,7 +458,11 @@ export async function generateWordBuffer(
               new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: [
-                  new TextRun({ text: `${item.skor} / 100`, bold: true, size: 20 }),
+                  new TextRun({
+                    text: `${item.skor} / 100`,
+                    bold: true,
+                    size: 20,
+                  }),
                 ],
               }),
             ],
@@ -362,6 +479,13 @@ export async function generateWordBuffer(
       })
   );
 
+  const signatureNoBorder = {
+    top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+    bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+    left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+    right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+  };
+
   const doc = new Document({
     sections: [
       {
@@ -373,7 +497,7 @@ export async function generateWordBuffer(
               new TextRun({
                 text: tpl.namaInstansi.toUpperCase(),
                 bold: true,
-                size: 28,
+                size: 26,
               }),
             ],
           }),
@@ -383,17 +507,17 @@ export async function generateWordBuffer(
               new TextRun({
                 text: tpl.subJudulInstansi,
                 bold: true,
-                color: "0E9CE8",
-                size: 22,
+                color: "1D4ED8",
+                size: 20,
               }),
             ],
           }),
           new Paragraph({
             alignment: AlignmentType.CENTER,
-            spacing: { after: 240 },
+            spacing: { after: 200 },
             border: {
               bottom: {
-                color: "0E9CE8",
+                color: "1D4ED8",
                 space: 6,
                 style: BorderStyle.SINGLE,
                 size: 12,
@@ -410,12 +534,27 @@ export async function generateWordBuffer(
           new Paragraph({
             alignment: AlignmentType.CENTER,
             heading: HeadingLevel.HEADING_2,
-            spacing: { before: 120, after: 200 },
+            spacing: { before: 120, after: 80 },
             children: [
               new TextRun({
-                text: "LAPORAN HASIL SUPERVISI AKADEMIK GURU",
+                text: "BERITA ACARA & LAPORAN HASIL SUPERVISI AKADEMIK",
                 bold: true,
                 size: 24,
+              }),
+            ],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 180 },
+            children: [
+              new TextRun({
+                text: `No. Registrasi: ${noReg} | Status: ${
+                  data.disahkan
+                    ? "DISAHKAN KEPALA SEKOLAH (IMMUTABLE)"
+                    : "DRAF EVALUASI"
+                }`,
+                size: 18,
+                color: "475569",
               }),
             ],
           }),
@@ -425,15 +564,23 @@ export async function generateWordBuffer(
               new TableRow({
                 children: [
                   new TableCell({
-                    shading: { fill: "F0F8FF", type: ShadingType.CLEAR },
-                    children: [new Paragraph({ children: [new TextRun({ text: "Nama Guru", bold: true })] })],
+                    shading: { fill: "EFF6FF", type: ShadingType.CLEAR },
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: "Nama Guru", bold: true })],
+                      }),
+                    ],
                   }),
                   new TableCell({
                     children: [new Paragraph({ text: data.namaGuru })],
                   }),
                   new TableCell({
-                    shading: { fill: "FFF1F5", type: ShadingType.CLEAR },
-                    children: [new Paragraph({ children: [new TextRun({ text: "Skor Akhir", bold: true })] })],
+                    shading: { fill: "F0FDFA", type: ShadingType.CLEAR },
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: "Skor Akhir", bold: true })],
+                      }),
+                    ],
                   }),
                   new TableCell({
                     children: [
@@ -452,15 +599,27 @@ export async function generateWordBuffer(
               new TableRow({
                 children: [
                   new TableCell({
-                    shading: { fill: "F0F8FF", type: ShadingType.CLEAR },
-                    children: [new Paragraph({ children: [new TextRun({ text: "Mata Pelajaran", bold: true })] })],
+                    shading: { fill: "EFF6FF", type: ShadingType.CLEAR },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Mata Pelajaran", bold: true }),
+                        ],
+                      }),
+                    ],
                   }),
                   new TableCell({
                     children: [new Paragraph({ text: data.mapelGuru || "Umum" })],
                   }),
                   new TableCell({
-                    shading: { fill: "FFF1F5", type: ShadingType.CLEAR },
-                    children: [new Paragraph({ children: [new TextRun({ text: "Tanggal Evaluasi", bold: true })] })],
+                    shading: { fill: "F0FDFA", type: ShadingType.CLEAR },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Tanggal Evaluasi", bold: true }),
+                        ],
+                      }),
+                    ],
                   }),
                   new TableCell({
                     children: [new Paragraph({ text: data.tanggalEvaluasi })],
@@ -470,8 +629,12 @@ export async function generateWordBuffer(
               new TableRow({
                 children: [
                   new TableCell({
-                    shading: { fill: "F0F8FF", type: ShadingType.CLEAR },
-                    children: [new Paragraph({ children: [new TextRun({ text: "Instrumen", bold: true })] })],
+                    shading: { fill: "EFF6FF", type: ShadingType.CLEAR },
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: "Instrumen", bold: true })],
+                      }),
+                    ],
                   }),
                   new TableCell({
                     children: [
@@ -481,8 +644,14 @@ export async function generateWordBuffer(
                     ],
                   }),
                   new TableCell({
-                    shading: { fill: "FFF1F5", type: ShadingType.CLEAR },
-                    children: [new Paragraph({ children: [new TextRun({ text: "NIP / Email", bold: true })] })],
+                    shading: { fill: "F0FDFA", type: ShadingType.CLEAR },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "NIP / Email", bold: true }),
+                        ],
+                      }),
+                    ],
                   }),
                   new TableCell({
                     children: [
@@ -494,7 +663,7 @@ export async function generateWordBuffer(
             ],
           }),
           new Paragraph({
-            spacing: { before: 280, after: 120 },
+            spacing: { before: 240, after: 100 },
             children: [
               new TextRun({
                 text: "1. Capaian Per Aspek Penilaian",
@@ -509,33 +678,41 @@ export async function generateWordBuffer(
               new TableRow({
                 children: [
                   new TableCell({
-                    shading: { fill: "0E9CE8", type: ShadingType.CLEAR },
-                    children: [
-                      new Paragraph({
-                        children: [
-                          new TextRun({ text: "Aspek", bold: true, color: "FFFFFF" }),
-                        ],
-                      }),
-                    ],
-                  }),
-                  new TableCell({
-                    shading: { fill: "0E9CE8", type: ShadingType.CLEAR },
-                    children: [
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        children: [
-                          new TextRun({ text: "Skor", bold: true, color: "FFFFFF" }),
-                        ],
-                      }),
-                    ],
-                  }),
-                  new TableCell({
-                    shading: { fill: "0E9CE8", type: ShadingType.CLEAR },
+                    shading: { fill: "1D4ED8", type: ShadingType.CLEAR },
                     children: [
                       new Paragraph({
                         children: [
                           new TextRun({
-                            text: "Analisis Evaluasi Sensei-AI",
+                            text: "Aspek",
+                            bold: true,
+                            color: "FFFFFF",
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    shading: { fill: "1D4ED8", type: ShadingType.CLEAR },
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [
+                          new TextRun({
+                            text: "Skor",
+                            bold: true,
+                            color: "FFFFFF",
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    shading: { fill: "1D4ED8", type: ShadingType.CLEAR },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Analisis Substantif (AI & Kepala Sekolah)",
                             bold: true,
                             color: "FFFFFF",
                           }),
@@ -549,24 +726,24 @@ export async function generateWordBuffer(
             ],
           }),
           new Paragraph({
-            spacing: { before: 280, after: 100 },
+            spacing: { before: 240, after: 80 },
             children: [
               new TextRun({
-                text: "2. Kesimpulan Evaluasi Sensei-AI",
+                text: "2. Temuan Substantif & Kesimpulan",
                 bold: true,
                 size: 22,
               }),
             ],
           }),
           new Paragraph({
-            spacing: { after: 200 },
-            children: [new TextRun({ text: data.kesimpulan, size: 21 })],
+            spacing: { after: 180 },
+            children: [new TextRun({ text: data.kesimpulan || "-", size: 21 })],
           }),
           new Paragraph({
-            spacing: { before: 200, after: 100 },
+            spacing: { before: 160, after: 80 },
             children: [
               new TextRun({
-                text: "3. Kekuatan Utama",
+                text: "3. Kekuatan Utama Pembelajaran",
                 bold: true,
                 size: 22,
               }),
@@ -575,15 +752,15 @@ export async function generateWordBuffer(
           ...data.kekuatan.map(
             (k, i) =>
               new Paragraph({
-                spacing: { after: 80 },
+                spacing: { after: 60 },
                 children: [new TextRun({ text: `${i + 1}. ${k}`, size: 20 })],
               })
           ),
           new Paragraph({
-            spacing: { before: 200, after: 100 },
+            spacing: { before: 180, after: 80 },
             children: [
               new TextRun({
-                text: "4. Saran Perbaikan & Tindak Lanjut",
+                text: "4. Rekomendasi Pembinaan Kepala Sekolah",
                 bold: true,
                 size: 22,
               }),
@@ -592,31 +769,30 @@ export async function generateWordBuffer(
           ...data.saran.map(
             (s, i) =>
               new Paragraph({
-                spacing: { after: 80 },
+                spacing: { after: 60 },
                 children: [new TextRun({ text: `${i + 1}. ${s}`, size: 20 })],
               })
           ),
           ...(data.catatanAdmin
             ? [
                 new Paragraph({
-                  spacing: { before: 220, after: 80 },
+                  spacing: { before: 180, after: 60 },
                   children: [
                     new TextRun({
-                      text: `5. Catatan Supervisor / Admin ${
+                      text: `5. Catatan Resmi Kepala Sekolah ${
                         data.diubahAdminOleh ? `(${data.diubahAdminOleh})` : ""
                       }`,
                       bold: true,
-                      color: "F43F80",
+                      color: "0F766E",
                       size: 22,
                     }),
                   ],
                 }),
                 new Paragraph({
-                  spacing: { after: 200 },
+                  spacing: { after: 160 },
                   children: [
                     new TextRun({
                       text: data.catatanAdmin,
-                      italics: true,
                       size: 20,
                     }),
                   ],
@@ -624,41 +800,156 @@ export async function generateWordBuffer(
               ]
             : []),
           new Paragraph({
-            spacing: { before: 420 },
-            alignment: AlignmentType.RIGHT,
+            spacing: { before: 200, after: 80 },
             children: [
               new TextRun({
-                text: `${tpl.kotaTandaTangan}, ${data.tanggalEvaluasi}`,
-                size: 20,
-              }),
-            ],
-          }),
-          new Paragraph({
-            alignment: AlignmentType.RIGHT,
-            children: [
-              new TextRun({
-                text: tpl.jabatanSupervisor,
-                size: 20,
-              }),
-            ],
-          }),
-          new Paragraph({
-            spacing: { before: 600 },
-            alignment: AlignmentType.RIGHT,
-            children: [
-              new TextRun({
-                text: tpl.namaSupervisor,
+                text: "6. Rencana Tindak Lanjut (RTL) Pengawas Sekolah",
                 bold: true,
-                size: 20,
+                size: 22,
               }),
             ],
           }),
-          new Paragraph({
-            alignment: AlignmentType.RIGHT,
-            children: [
-              new TextRun({
-                text: `NIP. ${tpl.nipSupervisor}`,
-                size: 18,
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: [
+              new TableRow({
+                children: [
+                  new TableCell({
+                    width: { size: 30, type: WidthType.PERCENTAGE },
+                    shading: { fill: "F1F5F9", type: ShadingType.CLEAR },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Rekomendasi Pengawas",
+                            bold: true,
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    width: { size: 70, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        text:
+                          data.rtlRekomendasi ||
+                          "Menunggu penetapan RTL oleh Pengawas Sekolah.",
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+              new TableRow({
+                children: [
+                  new TableCell({
+                    shading: { fill: "F1F5F9", type: ShadingType.CLEAR },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Target Peningkatan", bold: true }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    children: [new Paragraph({ text: data.rtlTarget || "-" })],
+                  }),
+                ],
+              }),
+              new TableRow({
+                children: [
+                  new TableCell({
+                    shading: { fill: "F1F5F9", type: ShadingType.CLEAR },
+                    children: [
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "Tenggat & Progres",
+                            bold: true,
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    children: [
+                      new Paragraph({
+                        text: `${data.rtlTenggat || "-"} (Status: ${
+                          data.rtlProgres || "Belum Dimulai"
+                        })`,
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new Paragraph({ spacing: { before: 320 }, text: "" }),
+          // Blok Tanda Tangan 3 Pihak
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: [
+              new TableRow({
+                children: [
+                  new TableCell({
+                    borders: signatureNoBorder,
+                    width: { size: 33, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({ text: "Guru yang Disupervisi," }),
+                      new Paragraph({
+                        spacing: { before: 500 },
+                        children: [
+                          new TextRun({ text: data.namaGuru, bold: true }),
+                        ],
+                      }),
+                      new Paragraph({
+                        text: `NIP. ${data.nipGuru || "-"}`,
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    borders: signatureNoBorder,
+                    width: { size: 33, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({ text: tpl.jabatanPengawas }),
+                      new Paragraph({
+                        spacing: { before: 500 },
+                        children: [
+                          new TextRun({
+                            text: data.pengawasNama || tpl.namaPengawas,
+                            bold: true,
+                          }),
+                        ],
+                      }),
+                      new Paragraph({
+                        text: `NIP. ${data.pengawasNip || tpl.nipPengawas}`,
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    borders: signatureNoBorder,
+                    width: { size: 34, type: WidthType.PERCENTAGE },
+                    children: [
+                      new Paragraph({
+                        text: `${tpl.kotaTandaTangan}, ${data.tanggalEvaluasi}`,
+                      }),
+                      new Paragraph({ text: tpl.jabatanSupervisor }),
+                      new Paragraph({
+                        spacing: { before: 340 },
+                        children: [
+                          new TextRun({
+                            text: data.disahkanOleh || tpl.namaSupervisor,
+                            bold: true,
+                          }),
+                        ],
+                      }),
+                      new Paragraph({
+                        text: `NIP. ${data.disahkanNip || tpl.nipSupervisor}`,
+                      }),
+                    ],
+                  }),
+                ],
               }),
             ],
           }),

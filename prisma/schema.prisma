@@ -13,17 +13,19 @@ model User {
   email        String         @unique
   nip          String?
   passwordHash String
-  role         String         @default("guru") // "admin" | "guru"
+  role         String         @default("guru") // "admin" | "kepala_sekolah" | "pengawas" | "guru"
+  jabatan      String?
+  unitKerja    String?        @default("SDN 01 Menteng")
   nomorWA      String?
   mapel        String?
   fotoUrl      String?
   aktif        Boolean        @default(true)
   lastLoginAt  DateTime?
-  badgesJSON   String         @default("[]")
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
   penugasan    Penugasan[]
+  perangkat    PerangkatSupervisi[]
   logs         LogAktivitas[]
 }
 
@@ -46,7 +48,7 @@ model Pertanyaan {
   instrumenId String
   teks        String
   tipe        String    @default("skala") // "skala" | "pilihan_ganda" | "ya_tidak" | "isian_singkat" | "esai"
-  aspek       String    @default("Perencanaan") // "Perencanaan" | "Pelaksanaan" | "Evaluasi" | "Penguasaan IT"
+  aspek       String    @default("Pembukaan Pembelajaran") // "Pembukaan Pembelajaran" | "Kegiatan Inti" | "Asesmen dan Penutup" | "Pemanfaatan Teknologi Informasi"
   bobot       Float     @default(1.0)
   urutan      Int       @default(1)
   wajib       Boolean   @default(true)
@@ -57,13 +59,16 @@ model Pertanyaan {
 }
 
 model Penugasan {
-  id          String    @id @default(cuid())
-  instrumenId String
-  guruId      String
-  tenggat     DateTime
-  status      String    @default("belum") // "belum" | "draft" | "selesai"
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  instrumenId       String
+  guruId            String
+  tenggat           DateTime
+  status            String    @default("belum") // "belum" | "draft" | "menunggu_verifikasi" | "perlu_revisi" | "dalam_penilaian" | "selesai" | "tindak_lanjut"
+  catatanVerifikasi String?
+  diverifikasiOleh  String?
+  diverifikasiPada  DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   instrumen   Instrumen @relation(fields: [instrumenId], references: [id], onDelete: Cascade)
   guru        User      @relation(fields: [guruId], references: [id], onDelete: Cascade)
@@ -85,43 +90,37 @@ model Jawaban {
 }
 
 model Hasil {
-  id               String    @id @default(cuid())
-  penugasanId      String    @unique
-  skorPerAspekJSON String    @default("[]") // [{"aspek": "", "skor": 0, "alasan": ""}]
-  skorTotal        Float     @default(0)
-  skorAsliAI       Float?
-  predikat         String    @default("-")
-  kesimpulan       String    @default("")
-  kekuatanJSON     String    @default("[]")
-  sarannyaJSON     String    @default("[]")
-  catatanAdmin     String?
-  diubahAdminOleh  String?
-  diubahAdminPada  DateTime?
-  status           String    @default("memproses") // "memproses" | "selesai" | "gagal"
-  errorMessage     String?
-  tokenUsage       Int       @default(0)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                   String    @id @default(cuid())
+  penugasanId          String    @unique
+  skorPerAspekJSON     String    @default("[]") // [{"aspek": "", "skor": 0, "alasan": ""}]
+  skorTotal            Float     @default(0)
+  skorAsliAI           Float?
+  predikat             String    @default("-")
+  kesimpulan           String    @default("")
+  kekuatanJSON         String    @default("[]")
+  sarannyaJSON         String    @default("[]")
+  catatanAdmin         String?
+  diubahAdminOleh      String?
+  diubahAdminPada      DateTime?
+  disahkan             Boolean   @default(false)
+  disahkanOleh         String?
+  disahkanNip          String?
+  disahkanPada         DateTime?
+  nomorRegistrasi      String?
+  rtlRekomendasi       String?
+  rtlTarget            String?
+  rtlTenggat           String?
+  rtlProgres           String    @default("Belum Dimulai")
+  pengawasNama         String?
+  pengawasNip          String?
+  ditinjauPengawasPada DateTime?
+  status               String    @default("memproses") // "memproses" | "selesai" | "gagal"
+  errorMessage         String?
+  tokenUsage           Int       @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  penugasan        Penugasan @relation(fields: [penugasanId], references: [id], onDelete: Cascade)
-  podcast          Podcast?
-}
-
-model Podcast {
-  id                  String   @id @default(cuid())
-  hasilId             String   @unique
-  naskah              String
-  transkripSegmenJSON String   @default("[]") // [{"start":0,"end":6,"speaker":"Sensei-AI","text":"..."}]
-  audioPath           String?
-  cacheHash           String?
-  status              String   @default("menunggu") // "menunggu" | "memproses" | "selesai" | "gagal"
-  durasi              Int      @default(0)
-  karakterTts         Int      @default(0)
-  errorMessage        String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  hasil               Hasil    @relation(fields: [hasilId], references: [id], onDelete: Cascade)
+  penugasan            Penugasan @relation(fields: [penugasanId], references: [id], onDelete: Cascade)
 }
 
 model Pengaturan {
@@ -142,3 +141,64 @@ model LogAktivitas {
 
   user     User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
+
+model PerangkatSupervisi {
+  id                     String   @id @default(cuid())
+  guruId                 String
+  judulPembelajaran      String
+  mataPelajaran          String
+  kelasFase              String   @default("Kelas 4 / Fase B")
+  semester               String   @default("Ganjil 2026/2027")
+  tanggalPelaksanaan     DateTime @default(now())
+
+  // 1. Modul Ajar / RPP
+  modulAjarJudul         String   @default("")
+  modulAjarTujuan        String   @default("")
+  modulAjarUrl           String   @default("")
+  modulAjarFileNama      String   @default("")
+  modulAjarStatus        Boolean  @default(false)
+
+  // 2. Lembar Kerja Peserta Didik (LKPD)
+  lkpdJudul              String   @default("")
+  lkpdDeskripsi          String   @default("")
+  lkpdUrl                String   @default("")
+  lkpdFileNama           String   @default("")
+  lkpdStatus             Boolean  @default(false)
+
+  // 3. Instrumen / Rubrik Asesmen
+  asesmenJenis           String   @default("Formatif & Sumatif")
+  asesmenKriteria        String   @default("")
+  asesmenUrl             String   @default("")
+  asesmenFileNama        String   @default("")
+  asesmenStatus          Boolean  @default(false)
+
+  // 4. Foto / Bukti Pelaksanaan
+  fotoBuktiJSON          String   @default("[]") // [{"judul": "...", "url": "...", "keterangan": "..."}]
+  fotoBuktiCatatan       String   @default("")
+  fotoBuktiStatus        Boolean  @default(false)
+
+  // 5. Media Dokumentasi Pembelajaran
+  mediaJenis             String   @default("")
+  mediaPlatform          String   @default("")
+  mediaUrl               String   @default("")
+  mediaDeskripsi         String   @default("")
+  mediaStatus            Boolean  @default(false)
+
+  // 6. Catatan Refleksi Mandiri Guru
+  refleksiKeberhasilan   String   @default("")
+  refleksiKendala        String   @default("")
+  refleksiTindakLanjut   String   @default("")
+  refleksiStatus         Boolean  @default(false)
+
+  // Status Verifikasi & Feedback Supervisor (Admin / Kepala Sekolah)
+  statusVerifikasi       String   @default("menunggu") // "menunggu" | "lengkap" | "revisi"
+  catatanSupervisor      String?
+  diverifikasiOleh       String?
+  diverifikasiPada       DateTime?
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  guru                   User     @relation(fields: [guruId], references: [id], onDelete: Cascade)
+}
+

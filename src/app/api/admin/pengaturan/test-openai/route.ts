@@ -61,11 +61,11 @@ export async function POST(req: NextRequest) {
           {
             role: "system",
             content:
-              "Kamu adalah Sensei-AI, asisten supervisi cerdas. Balas tes koneksi ini secara ramah, sopan, dan hangat dalam 1-2 kalimat anime supervisor.",
+              "Anda adalah Asisten AI Supervisi Akademik SIPENA. Balas uji koneksi ini secara singkat, formal, dan informatif dalam 1-2 kalimat.",
           },
           {
             role: "user",
-            content: "Halo Sensei-AI, tes koneksi streaming sistem supervisi!",
+            content: "Halo Asisten AI SIPENA, tes koneksi streaming sistem supervisi!",
           },
         ],
       });
@@ -103,11 +103,11 @@ export async function POST(req: NextRequest) {
         {
           role: "system",
           content:
-            "Kamu adalah Sensei-AI. Balas singkat dalam 1 kalimat ramah.",
+            "Anda adalah Asisten AI Supervisi Akademik SIPENA. Balas singkat dalam 1 kalimat formal.",
         },
         {
           role: "user",
-          content: "Tes koneksi sistem supervisi.",
+          content: "Tes koneksi sistem supervisi akademik.",
         },
       ],
     });

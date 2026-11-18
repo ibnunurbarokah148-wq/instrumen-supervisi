@@ -1,12 +1,12 @@
-import crypto from "crypto";
-import fs from "fs/promises";
-import path from "path";
 import OpenAI from "openai";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getAllSettingsDecrypted, logActivity } from "@/lib/settings";
+import {
+  getAllSettingsDecrypted,
+  getPredikatFromSkor,
+  logActivity,
+} from "@/lib/settings";
 
-// Skema Zod sesuai PRD Bagian 7
 export const EvaluatorOutputSchema = z.object({
   skor_per_aspek: z
     .array(
@@ -22,77 +22,64 @@ export const EvaluatorOutputSchema = z.object({
   kesimpulan: z.string(),
   kekuatan: z.array(z.string()).min(1),
   saran: z.array(z.string()).min(1),
-  naskah_podcast: z.string().min(20),
 });
 
 export type EvaluatorOutput = z.infer<typeof EvaluatorOutputSchema>;
 
-export interface TranscriptSegment {
-  start: number;
-  end: number;
-  speaker: string;
-  text: string;
+export interface ParsedJawabanItem {
+  nilai: string | number;
+  skorMandiri?: number;
+  catatanGuru?: string;
+  buktiUrl?: string;
+  skorKepsek?: number;
+  catatanKepsek?: string;
 }
 
-export function buildTranscriptSegments(
-  naskah: string,
-  speed: number = 1.0
-): {
-  segments: TranscriptSegment[];
-  totalDuration: number;
-} {
-  const paragraphs = naskah
-    .split(/\n+/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
-
-  const sentences: { speaker: string; text: string }[] = [];
-  for (const para of paragraphs) {
-    let speaker = "Sensei-AI";
-    let cleanPara = para;
-    const matchSpeaker = para.match(/^([A-Za-z0-9\-_ ]{2,20}):\s*(.+)$/);
-    if (matchSpeaker) {
-      speaker = matchSpeaker[1].trim();
-      cleanPara = matchSpeaker[2].trim();
+export function parseStructuredJawaban(rawJson?: string | null): ParsedJawabanItem {
+  if (!rawJson) return { nilai: "" };
+  try {
+    const parsed = JSON.parse(rawJson);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const obj = parsed as Record<string, unknown>;
+      const rawNilai = obj.nilai ?? obj.skor ?? "";
+      return {
+        nilai:
+          typeof rawNilai === "number" || typeof rawNilai === "string"
+            ? rawNilai
+            : "",
+        skorMandiri:
+          typeof obj.skor === "number"
+            ? obj.skor
+            : typeof rawNilai === "number"
+            ? rawNilai
+            : undefined,
+        catatanGuru: typeof obj.catatan === "string" ? obj.catatan : undefined,
+        buktiUrl: typeof obj.buktiUrl === "string" ? obj.buktiUrl : undefined,
+        skorKepsek:
+          typeof obj.skorKepsek === "number" ? obj.skorKepsek : undefined,
+        catatanKepsek:
+          typeof obj.catatanKepsek === "string" ? obj.catatanKepsek : undefined,
+      };
     }
-
-    const parts = cleanPara
-      .split(/(?<=[.!?])\s+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    for (const part of parts) {
-      sentences.push({ speaker, text: part });
-    }
+    return {
+      nilai:
+        typeof parsed === "number" || typeof parsed === "string"
+          ? parsed
+          : String(parsed),
+      skorMandiri: typeof parsed === "number" ? parsed : undefined,
+    };
+  } catch {
+    return { nilai: rawJson };
   }
-
-  let currentTime = 0;
-  const segments: TranscriptSegment[] = [];
-
-  for (const item of sentences) {
-    const wordCount = item.text.split(/\s+/).length;
-    const rawSec = Math.max(
-      2,
-      Math.round(wordCount / (2.4 * Math.max(0.6, speed)))
-    );
-    const start = currentTime;
-    const end = currentTime + rawSec;
-    segments.push({
-      start,
-      end,
-      speaker: item.speaker,
-      text: item.text,
-    });
-    currentTime = end;
-  }
-
-  return {
-    segments,
-    totalDuration: Math.max(5, currentTime),
-  };
 }
 
-export async function evaluateSupervisi(penugasanId: string): Promise<{
+export async function evaluateSupervisi(
+  penugasanId: string,
+  options?: {
+    triggeredBy?: "guru" | "kepala_sekolah" | "admin";
+    evaluatorName?: string;
+  }
+): Promise<{
   success: boolean;
   hasilId?: string;
   error?: string;
@@ -114,21 +101,19 @@ export async function evaluateSupervisi(penugasanId: string): Promise<{
     return { success: false, error: "Data penugasan tidak ditemukan." };
   }
 
+  const latestPerangkat = await prisma.perangkatSupervisi.findFirst({
+    where: { guruId: penugasan.guruId },
+    orderBy: { updatedAt: "desc" },
+  });
+
   const settings = await getAllSettingsDecrypted();
   const jawabanMap = new Map(
     penugasan.jawaban.map((j) => [j.pertanyaanId, j.nilaiJSON])
   );
 
   const itemsPayload = penugasan.instrumen.pertanyaan.map((p) => {
-    let parsedAns: unknown = "";
     const raw = jawabanMap.get(p.id);
-    if (raw !== undefined) {
-      try {
-        parsedAns = JSON.parse(raw);
-      } catch {
-        parsedAns = raw;
-      }
-    }
+    const parsed = parseStructuredJawaban(raw);
     return {
       pertanyaanId: p.id,
       urutan: p.urutan,
@@ -137,13 +122,26 @@ export async function evaluateSupervisi(penugasanId: string): Promise<{
       tipe: p.tipe,
       bobot: p.bobot,
       opsiJSON: p.opsiJSON,
-      jawabanRaw: parsedAns,
+      jawabanGuru: parsed.nilai,
+      catatanKeterlaksanaan: parsed.catatanGuru || "",
+      buktiPendukung: parsed.buktiUrl || "",
+      skorObservasiKepsek: parsed.skorKepsek ?? null,
+      catatanObservasiKepsek: parsed.catatanKepsek || "",
     };
   });
 
   const existingHasil = await prisma.hasil.findUnique({
     where: { penugasanId },
   });
+
+  if (existingHasil?.disahkan) {
+    return {
+      success: false,
+      hasilId: existingHasil.id,
+      error:
+        "Laporan ini sudah disahkan dan dikunci secara permanen oleh Kepala Sekolah.",
+    };
+  }
 
   const hasilRecord = existingHasil
     ? await prisma.hasil.update({
@@ -173,12 +171,12 @@ export async function evaluateSupervisi(penugasanId: string): Promise<{
   }
 
   const modelName = (settings.openai_model || "gpt-4o-mini").trim();
-  const temperature = Number(settings.openai_temperature ?? 0.4);
+  const temperature = Number(settings.openai_temperature ?? 0.3);
   const maxTokens = Number(settings.openai_max_tokens ?? 2000);
 
   if (!apiKey) {
     const errMsg =
-      "API Key OpenAI-compatible belum diatur oleh Admin di menu Pengaturan API (/admin/pengaturan-api).";
+      "API Key OpenAI-compatible belum diatur di menu Pengaturan API (/admin/pengaturan-api).";
     await prisma.hasil.update({
       where: { id: hasilRecord.id },
       data: {
@@ -188,9 +186,9 @@ export async function evaluateSupervisi(penugasanId: string): Promise<{
     });
     await logActivity({
       userId: penugasan.guruId,
-      namaUser: penugasan.guru.nama,
-      role: "guru",
-      aksi: "AI_EVALUATOR_GAGAL",
+      namaUser: options?.evaluatorName || penugasan.guru.nama,
+      role: options?.triggeredBy || "guru",
+      aksi: "AI_CO_EVALUATOR_GAGAL",
       detail: errMsg,
     });
     return {
@@ -209,34 +207,50 @@ export async function evaluateSupervisi(penugasanId: string): Promise<{
     {
       guru: {
         nama: penugasan.guru.nama,
+        nip: penugasan.guru.nip || "-",
         mapel: penugasan.guru.mapel || "Umum",
       },
       instrumen: {
         judul: penugasan.instrumen.judul,
         deskripsi: penugasan.instrumen.deskripsi,
       },
+      perangkat_pembelajaran: latestPerangkat
+        ? {
+            judul: latestPerangkat.judulPembelajaran,
+            status_verifikasi: latestPerangkat.statusVerifikasi,
+            modul_ajar: latestPerangkat.modulAjarJudul,
+            tujuan: latestPerangkat.modulAjarTujuan,
+            lkpd: latestPerangkat.lkpdJudul,
+            asesmen: `${latestPerangkat.asesmenJenis} - ${latestPerangkat.asesmenKriteria}`,
+            refleksi_kendala: latestPerangkat.refleksiKendala,
+            refleksi_tindak_lanjut: latestPerangkat.refleksiTindakLanjut,
+          }
+        : null,
       rubrik: settings.ai_rubrik_json,
-      template_podcast: settings.podcast_template_json,
-      daftar_jawaban: itemsPayload.map((it) => ({
+      daftar_indikator_dan_bukti: itemsPayload.map((it) => ({
         aspek: it.aspek,
         bobot: it.bobot,
         tipe: it.tipe,
-        pertanyaan: it.teks,
-        jawaban_guru: it.jawabanRaw,
+        indikator: it.teks,
+        evaluasi_diri_guru: it.jawabanGuru,
+        catatan_keterlaksanaan_guru: it.catatanKeterlaksanaan,
+        bukti_pendukung: it.buktiPendukung,
+        skor_observasi_kepsek: it.skorObservasiKepsek,
+        catatan_observasi_kepsek: it.catatanObservasiKepsek,
       })),
     },
     null,
     2
   );
 
-  // Maksimal 3 percobaan (1 utama + 2 retry sesuai PRD 7.3)
+  // Maksimal 3 percobaan (1 utama + 2 retry)
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const useJsonObjectFormat =
         attempt === 1 && !baseURL.toLowerCase().includes("anthropic.com");
       const completion = await client.chat.completions.create({
         model: modelName,
-        temperature: isNaN(temperature) ? 0.4 : temperature,
+        temperature: isNaN(temperature) ? 0.3 : temperature,
         max_tokens: isNaN(maxTokens) ? 2000 : maxTokens,
         ...(useJsonObjectFormat
           ? { response_format: { type: "json_object" as const } }
@@ -248,7 +262,7 @@ export async function evaluateSupervisi(penugasanId: string): Promise<{
           },
           {
             role: "user",
-            content: `Evaluasi jawaban supervisi guru berikut dan kembalikan JSON terstruktur sesuai instruksi:\n${userPrompt}`,
+            content: `Analisis instrumen supervisi akademik berikut (mencakup evaluasi diri guru, catatan bukti keterlaksanaan, perangkat pembelajaran, dan skor observasi Kepala Sekolah bila tersedia), lalu kembalikan HANYA JSON terstruktur:\n${userPrompt}`,
           },
         ],
       });
@@ -267,9 +281,9 @@ export async function evaluateSupervisi(penugasanId: string): Promise<{
       lastError = err instanceof Error ? err.message : String(err);
       await logActivity({
         userId: penugasan.guruId,
-        namaUser: penugasan.guru.nama,
-        role: "guru",
-        aksi: "AI_EVALUATOR_RETRY",
+        namaUser: options?.evaluatorName || penugasan.guru.nama,
+        role: options?.triggeredBy || "guru",
+        aksi: "AI_CO_EVALUATOR_RETRY",
         detail: `Percobaan ke-${attempt} gagal: ${lastError}`,
       });
     }
@@ -280,15 +294,20 @@ export async function evaluateSupervisi(penugasanId: string): Promise<{
       where: { id: hasilRecord.id },
       data: {
         status: "gagal",
-        errorMessage: `Gagal memvalidasi respons AI setelah 3 percobaan: ${lastError}`,
+        errorMessage: `Gagal memvalidasi respons AI Co-Evaluator setelah 3 percobaan: ${lastError}`,
       },
     });
     return {
       success: false,
       hasilId: hasilRecord.id,
-      error: `Evaluasi AI gagal: ${lastError}. Silakan tekan tombol Coba Lagi atau periksa Pengaturan API.`,
+      error: `Analisis AI Co-Evaluator gagal: ${lastError}. Silakan periksa Pengaturan API atau coba lagi.`,
     };
   }
+
+  const predikatResmi = getPredikatFromSkor(
+    finalEvaluation.skor_total,
+    settings.ai_rubrik_json
+  );
 
   const updatedHasil = await prisma.hasil.update({
     where: { id: hasilRecord.id },
@@ -296,7 +315,7 @@ export async function evaluateSupervisi(penugasanId: string): Promise<{
       skorPerAspekJSON: JSON.stringify(finalEvaluation.skor_per_aspek),
       skorTotal: finalEvaluation.skor_total,
       skorAsliAI: finalEvaluation.skor_total,
-      predikat: finalEvaluation.predikat,
+      predikat: predikatResmi || finalEvaluation.predikat,
       kesimpulan: finalEvaluation.kesimpulan,
       kekuatanJSON: JSON.stringify(finalEvaluation.kekuatan),
       sarannyaJSON: JSON.stringify(finalEvaluation.saran),
@@ -306,269 +325,42 @@ export async function evaluateSupervisi(penugasanId: string): Promise<{
     },
   });
 
-  await prisma.penugasan.update({
-    where: { id: penugasanId },
-    data: { status: "selesai" },
-  });
-
-  // Lencana Pencapaian (Gamifikasi sesuai PRD Bagian 13)
-  try {
-    const currentBadges: string[] = JSON.parse(
-      penugasan.guru.badgesJSON || "[]"
-    );
-    const badgeSet = new Set(currentBadges);
-    badgeSet.add("Supervisi Pertama Selesai 🌸");
-    if (finalEvaluation.skor_total >= 85) {
-      badgeSet.add("Sensei Teladan (Sangat Baik) 🌟");
-    }
-    if (new Date() <= new Date(penugasan.tenggat)) {
-      badgeSet.add("Disiplin Tepat Waktu ⚡");
-    }
-    await prisma.user.update({
-      where: { id: penugasan.guruId },
-      data: { badgesJSON: JSON.stringify(Array.from(badgeSet)) },
+  // Pindahkan penugasan ke "dalam_penilaian" agar Kepala Sekolah dapat meninjau, menilai, dan mengesahkan (Immutable)
+  if (penugasan.status !== "selesai" && penugasan.status !== "tindak_lanjut") {
+    await prisma.penugasan.update({
+      where: { id: penugasanId },
+      data: { status: "dalam_penilaian" },
     });
-  } catch {
-    // ignore badge error
   }
-
-  const speed = Number(settings.fish_speed || "1.0") || 1.0;
-  const { segments, totalDuration } = buildTranscriptSegments(
-    finalEvaluation.naskah_podcast,
-    speed
-  );
-
-  await prisma.podcast.upsert({
-    where: { hasilId: updatedHasil.id },
-    update: {
-      naskah: finalEvaluation.naskah_podcast,
-      transkripSegmenJSON: JSON.stringify(segments),
-      durasi: totalDuration,
-      karakterTts: finalEvaluation.naskah_podcast.length,
-      status: "menunggu",
-      errorMessage: null,
-    },
-    create: {
-      hasilId: updatedHasil.id,
-      naskah: finalEvaluation.naskah_podcast,
-      transkripSegmenJSON: JSON.stringify(segments),
-      durasi: totalDuration,
-      karakterTts: finalEvaluation.naskah_podcast.length,
-      status: "menunggu",
-    },
-  });
 
   await logActivity({
     userId: penugasan.guruId,
-    namaUser: penugasan.guru.nama,
-    role: "guru",
-    aksi: "EVALUASI_AI_SELESAI",
-    detail: `Supervisi "${penugasan.instrumen.judul}" dievaluasi dengan skor ${finalEvaluation.skor_total} (${finalEvaluation.predikat})`,
+    namaUser: options?.evaluatorName || penugasan.guru.nama,
+    role: options?.triggeredBy || "guru",
+    aksi: "AI_CO_EVALUATOR_SELESAI",
+    detail: `Draf analisis AI Co-Evaluator untuk "${penugasan.instrumen.judul}" (${penugasan.guru.nama}) berhasil disusun dengan skor ${finalEvaluation.skor_total} (${predikatResmi})`,
   });
 
-  // Jalankan pipeline podcast Fish Audio di latar belakang (asynchronous) agar respons submit cepat dan tidak membuat UI guru stuck
-  generatePodcastAudio(updatedHasil.id).catch(async (err) => {
-    console.error("Gagal generate podcast di background:", err);
-    await prisma.podcast
-      .update({
-        where: { hasilId: updatedHasil.id },
-        data: {
-          status: "gagal",
-          errorMessage: err instanceof Error ? err.message : String(err),
-        },
-      })
-      .catch(() => {});
-  });
-
-  // Kirim notifikasi ke Bot Shiroko bila integrasi aktif (PRD Bagian 7.5 & 10)
+  // Kirim notifikasi awal ke Bot WhatsApp jika diaktifkan
   if (settings.shiroko_enabled === "true" && settings.shiroko_url) {
     triggerShirokoWebhook({
-      event: "hasil_supervisi_selesai",
+      event: "draf_supervisi_siap_review",
       guru: {
         nama: penugasan.guru.nama,
+        nip: penugasan.guru.nip,
         nomorWA: penugasan.guru.nomorWA,
         mapel: penugasan.guru.mapel,
       },
       instrumen: penugasan.instrumen.judul,
       skorTotal: finalEvaluation.skor_total,
-      predikat: finalEvaluation.predikat,
+      predikat: predikatResmi,
       kesimpulan: finalEvaluation.kesimpulan,
       hasilId: updatedHasil.id,
+      statusTahapan: "dalam_penilaian",
     }).catch(() => {});
   }
 
   return { success: true, hasilId: updatedHasil.id };
-}
-
-// Pipeline Podcast Murni Fish Audio TTS dengan pemecahan paragraf & sistem Cache (PRD Bagian 8)
-export async function generatePodcastAudio(hasilId: string): Promise<{
-  success: boolean;
-  audioPath?: string;
-  error?: string;
-}> {
-  const podcast = await prisma.podcast.findUnique({
-    where: { hasilId },
-  });
-  if (!podcast) {
-    return { success: false, error: "Data podcast tidak ditemukan." };
-  }
-
-  const settings = await getAllSettingsDecrypted();
-  const fishKey = (settings.fish_api_key || "").trim();
-  const voiceId = (settings.fish_voice_id || "").trim();
-  const format = settings.fish_format === "wav" ? "wav" : "mp3";
-  const speed = Number(settings.fish_speed || "1.0") || 1.0;
-  const temperature = Number(settings.fish_temperature || "0.7") || 0.7;
-  const topP = Number(settings.fish_top_p || "0.7") || 0.7;
-  const normalize = settings.fish_normalize !== "false";
-  const chunkLength = Number(settings.fish_chunk_length || "200") || 200;
-
-  if (!fishKey) {
-    const errMsg =
-      "API Key Fish Audio belum diatur oleh Admin di menu Pengaturan API (/admin/pengaturan-api).";
-    await prisma.podcast.update({
-      where: { id: podcast.id },
-      data: {
-        status: "gagal",
-        errorMessage: errMsg,
-      },
-    });
-    await logActivity({
-      aksi: "FISH_AUDIO_GAGAL",
-      detail: errMsg,
-    });
-    return { success: false, error: errMsg };
-  }
-
-  // Hitung hash untuk cache: naskah yang sama + suara & parameter sama tidak digenerate ulang (PRD Bagian 8)
-  const cacheHash = crypto
-    .createHash("sha256")
-    .update(
-      JSON.stringify({
-        naskah: podcast.naskah,
-        voiceId,
-        format,
-        speed,
-        temperature,
-        topP,
-      })
-    )
-    .digest("hex");
-
-  await prisma.podcast.update({
-    where: { id: podcast.id },
-    data: { status: "memproses", cacheHash, errorMessage: null },
-  });
-
-  const storageDir = path.join(process.cwd(), "storage", "podcast");
-  await fs.mkdir(storageDir, { recursive: true });
-
-  // Cek apakah sudah ada cache audio dengan cacheHash yang sama
-  const cachedPodcast = await prisma.podcast.findFirst({
-    where: {
-      cacheHash,
-      status: "selesai",
-      audioPath: { not: null },
-    },
-  });
-
-  if (cachedPodcast?.audioPath) {
-    const existingFullPath = path.join(storageDir, cachedPodcast.audioPath);
-    try {
-      await fs.access(existingFullPath);
-      await prisma.podcast.update({
-        where: { id: podcast.id },
-        data: {
-          audioPath: cachedPodcast.audioPath,
-          status: "selesai",
-          durasi: cachedPodcast.durasi || podcast.durasi,
-        },
-      });
-      return { success: true, audioPath: cachedPodcast.audioPath };
-    } catch {
-      // File cache tidak ditemukan di disk, lanjut generate ke Fish Audio
-    }
-  }
-
-  // Pecah naskah per paragraf agar aman dari batas panjang teks (PRD Bagian 8)
-  const paragraphs = podcast.naskah
-    .split(/\n\s*\n/)
-    .map((p) => p.replace(/^Sensei-AI:\s*/i, "").trim())
-    .filter((p) => p.length > 0);
-
-  try {
-    const audioBuffers: Buffer[] = [];
-    for (const paragraph of paragraphs) {
-      const res = await fetch("https://api.fish.audio/v1/tts", {
-        method: "POST",
-        signal: AbortSignal.timeout(15000),
-        headers: {
-          Authorization: `Bearer ${fishKey}`,
-          "Content-Type": "application/json",
-          model: settings.fish_model || "s2.1-pro-free",
-        },
-        body: JSON.stringify({
-          text: paragraph,
-          reference_id: voiceId || undefined,
-          format,
-          mp3_bitrate: 128,
-          normalize,
-          chunk_length: chunkLength,
-          temperature,
-          top_p: topP,
-          prosody: {
-            speed,
-            volume: 0,
-          },
-        }),
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(
-          `Fish Audio API (${res.status}): ${errText.slice(0, 180)}`
-        );
-      }
-
-      const arrBuf = await res.arrayBuffer();
-      audioBuffers.push(Buffer.from(arrBuf));
-    }
-
-    const combined = Buffer.concat(audioBuffers);
-    const fileName = `podcast-${podcast.id}.${format}`;
-    const fullPath = path.join(storageDir, fileName);
-    await fs.writeFile(fullPath, combined);
-
-    await prisma.podcast.update({
-      where: { id: podcast.id },
-      data: {
-        audioPath: fileName,
-        status: "selesai",
-        errorMessage: null,
-      },
-    });
-
-    await logActivity({
-      aksi: "FISH_AUDIO_SUKSES",
-      detail: `Berhasil membuat audio podcast Fish Audio (${fileName}, ${combined.length} bytes)`,
-    });
-
-    return { success: true, audioPath: fileName };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    await logActivity({
-      aksi: "FISH_AUDIO_ERROR",
-      detail: `Gagal memanggil Fish Audio TTS untuk hasil ${hasilId}: ${msg}`,
-    });
-    await prisma.podcast.update({
-      where: { id: podcast.id },
-      data: {
-        status: "gagal",
-        errorMessage: msg,
-      },
-    });
-    return { success: false, error: msg };
-  }
 }
 
 export async function triggerShirokoWebhook(payload: Record<string, unknown>) {
@@ -586,7 +378,7 @@ export async function triggerShirokoWebhook(payload: Record<string, unknown>) {
   return { ok: res.ok, status: res.status };
 }
 
-// Fitur Buat Pertanyaan dengan AI untuk Admin (PRD Bagian 5.3) - Murni OpenAI-Compatible API
+// Fitur Buat Pertanyaan dengan AI untuk Admin / Kepala Sekolah (OpenAI-Compatible API)
 export async function generateQuestionsWithAI(params: {
   topik: string;
   jumlah: number;
@@ -616,17 +408,17 @@ export async function generateQuestionsWithAI(params: {
   const client = new OpenAI({ apiKey, baseURL });
   const res = await client.chat.completions.create({
     model: modelName,
-    temperature: 0.6,
+    temperature: 0.5,
     response_format: { type: "json_object" },
     messages: [
       {
         role: "system",
         content:
-          'Kamu adalah pakar instrumen supervisi pendidikan. Buat daftar pertanyaan supervisi guru dalam format JSON {"pertanyaan": [{"teks": "...", "tipe": "skala|pilihan_ganda|ya_tidak|isian_singkat|esai", "aspek": "Perencanaan|Pelaksanaan|Evaluasi|Penguasaan IT", "bobot": 1.0, "wajib": true, "opsi": []}]}',
+          'Anda adalah pakar instrumen supervisi akademik Kurikulum Merdeka (Permendikbudristek No. 16 Tahun 2022). Buat daftar indikator supervisi guru dalam format JSON {"pertanyaan": [{"teks": "...", "tipe": "skala|pilihan_ganda|ya_tidak|isian_singkat|esai", "aspek": "Pembukaan Pembelajaran|Kegiatan Inti|Asesmen dan Penutup|Pemanfaatan Teknologi Informasi", "bobot": 1.0, "wajib": true, "opsi": []}]}',
       },
       {
         role: "user",
-        content: `Buatkan ${params.jumlah} pertanyaan instrumen supervisi dengan topik: "${params.topik}". Pastikan mencakup aspek Perencanaan, Pelaksanaan, Evaluasi, dan Penguasaan IT.`,
+        content: `Buatkan ${params.jumlah} indikator instrumen supervisi akademik dengan topik: "${params.topik}". Pastikan mencakup aspek Pembukaan Pembelajaran, Kegiatan Inti, Asesmen dan Penutup, serta Pemanfaatan Teknologi Informasi.`,
       },
     ],
   });

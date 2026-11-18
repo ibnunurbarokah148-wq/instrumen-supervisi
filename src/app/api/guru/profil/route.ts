@@ -30,6 +30,12 @@ export async function PUT(req: NextRequest) {
     if (typeof body.mapel === "string") {
       updateData.mapel = body.mapel.trim();
     }
+    if (typeof body.jabatan === "string") {
+      updateData.jabatan = body.jabatan.trim();
+    }
+    if (typeof body.unitKerja === "string") {
+      updateData.unitKerja = body.unitKerja.trim();
+    }
     if (typeof body.nomorWA === "string") {
       updateData.nomorWA = body.nomorWA.trim() || null;
     }
@@ -64,10 +70,11 @@ export async function PUT(req: NextRequest) {
         nama: true,
         email: true,
         nip: true,
+        jabatan: true,
+        unitKerja: true,
         mapel: true,
         nomorWA: true,
         fotoUrl: true,
-        badgesJSON: true,
       },
     });
 

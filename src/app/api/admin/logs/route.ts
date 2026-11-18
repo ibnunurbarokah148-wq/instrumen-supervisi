@@ -16,7 +16,7 @@ export async function GET() {
   const { error } = await requireAdmin();
   if (error) return error;
 
-  const [logs, hasilAgg, podcastAgg, failedLogsCount, settings] =
+  const [logs, hasilAgg, failedLogsCount, settings] =
     await Promise.all([
       prisma.logAktivitas.findMany({
         orderBy: { waktu: "desc" },
@@ -24,10 +24,6 @@ export async function GET() {
       }),
       prisma.hasil.aggregate({
         _sum: { tokenUsage: true },
-        _count: { id: true },
-      }),
-      prisma.podcast.aggregate({
-        _sum: { karakterTts: true, durasi: true },
         _count: { id: true },
       }),
       prisma.logAktivitas.count({
@@ -44,8 +40,8 @@ export async function GET() {
 
   const totalTokenAI = hasilAgg._sum.tokenUsage || 0;
   const totalEvaluasiAI = hasilAgg._count.id || 0;
-  const totalKarakterTTS = podcastAgg._sum.karakterTts || 0;
-  const totalDurasiDetik = podcastAgg._sum.durasi || 0;
+  const totalKarakterTTS = 0;
+  const totalDurasiDetik = 0;
 
   const baseURL = (
     settings.openai_base_url || "https://api.openai.com/v1"
@@ -273,7 +269,7 @@ export async function GET() {
       totalTokenAI,
       totalEvaluasiAI,
       totalKarakterTTS,
-      totalPodcast: podcastAgg._count.id,
+      totalPodcast: 0,
       totalDurasiDetik,
       failedLogsCount,
       estimasiBiayaUSD,

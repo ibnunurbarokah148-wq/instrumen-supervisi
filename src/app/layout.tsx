@@ -15,9 +15,9 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "Sensei-AI • Web Agent Supervisor Pendidikan",
+  title: "SIPENA • Sistem Informasi Supervisi & Evaluasi Akademik Berbasis AI",
   description:
-    "Instrumen Supervisi Akademik Berbasis AI & Podcast Suara Fish Audio (Panel Admin & Guru Terpisah)",
+    "Platform Supervisi Akademik End-to-End (Guru, Kepala Sekolah, Pengawas Sekolah, Admin) terintegrasi Asisten AI Co-Evaluator & Bot WhatsApp",
 };
 
 export default function RootLayout({

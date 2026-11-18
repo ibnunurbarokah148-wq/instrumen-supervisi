@@ -6,7 +6,7 @@ export async function GET() {
   const { session, error } = await requireGuru();
   if (error) return error;
 
-  const [guru, penugasanList] = await Promise.all([
+  const [guru, penugasanList, perangkatTerbaru] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.userId },
       select: {
@@ -14,10 +14,11 @@ export async function GET() {
         nama: true,
         email: true,
         nip: true,
+        jabatan: true,
+        unitKerja: true,
         nomorWA: true,
         mapel: true,
         fotoUrl: true,
-        badgesJSON: true,
         lastLoginAt: true,
       },
     }),
@@ -30,13 +31,22 @@ export async function GET() {
           },
         },
         _count: { select: { jawaban: true } },
-        hasil: {
-          include: {
-            podcast: true,
-          },
-        },
+        hasil: true,
       },
       orderBy: { createdAt: "desc" },
+    }),
+    prisma.perangkatSupervisi.findFirst({
+      where: { guruId: session.userId },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        judulPembelajaran: true,
+        statusVerifikasi: true,
+        catatanSupervisor: true,
+        diverifikasiOleh: true,
+        diverifikasiPada: true,
+        updatedAt: true,
+      },
     }),
   ]);
 
@@ -46,12 +56,12 @@ export async function GET() {
       judulInstrumen: p.instrumen.judul,
       versiInstrumen: p.instrumen.versi,
       tenggat: p.tenggat,
+      statusPenugasan: p.status,
       ...p.hasil!,
     }));
 
   const hasilTerakhir = hasilSelesai[0] || null;
 
-  // Data perbandingan antar periode untuk Riwayat (PRD Bagian 6.4 & 13)
   const riwayatTren = [...hasilSelesai].reverse().map((h, i) => ({
     periode: `Periode ${i + 1}`,
     tanggal: new Date(h.createdAt).toLocaleDateString("id-ID", {
@@ -62,27 +72,29 @@ export async function GET() {
     judul: h.judulInstrumen,
     skorTotal: h.skorTotal,
     predikat: h.predikat,
+    disahkan: h.disahkan,
     hasilId: h.id,
     penugasanId: h.penugasanId,
   }));
 
   let narasiPerkembangan =
-    "Sensei-AI siap mendampingi perjalanan peningkatan kualitas pembelajaran Anda dari periode ke periode!";
+    "Asisten AI SIPENA siap mendampingi peningkatan mutu pembelajaran dan refleksi tindak lanjut supervisi Anda.";
   if (riwayatTren.length >= 2) {
     const prev = riwayatTren[riwayatTren.length - 2];
     const curr = riwayatTren[riwayatTren.length - 1];
-    const diff = curr.skorTotal - prev.skorTotal;
+    const diff = Number((curr.skorTotal - prev.skorTotal).toFixed(1));
     if (diff > 0) {
-      narasiPerkembangan = `Subarashii, ${guru?.nama.split(",")[0]}-sensei! ✨ Skor supervisi Anda meningkat +${diff} poin dari ${prev.skorTotal} (${prev.predikat}) menjadi ${curr.skorTotal} (${curr.predikat}). Konsistensi refleksi dan integrasi IT Anda membuahkan hasil nyata!`;
+      narasiPerkembangan = `Capaian supervisi Bapak/Ibu ${guru?.nama.split(",")[0]} meningkat +${diff} poin dari ${prev.skorTotal} (${prev.predikat}) menjadi ${curr.skorTotal} (${curr.predikat}). Konsistensi pelaksanaan pembelajaran berdiferensiasi dan pemanfaatan TIK membuahkan hasil optimal.`;
     } else if (diff === 0) {
-      narasiPerkembangan = `Otsukare-sama desu! Skor Anda stabil di angka ${curr.skorTotal} (${curr.predikat}). Mari coba satu eksperimen metode baru di periode berikutnya untuk melompat lebih tinggi!`;
+      narasiPerkembangan = `Capaian supervisi stabil pada skor ${curr.skorTotal} (${curr.predikat}). Pertahankan konsistensi praktik baik dan implementasikan rekomendasi tindak lanjut Pengawas Pembina.`;
     } else {
-      narasiPerkembangan = `Tetap semangat, Sensei! Terdapat perubahan ${diff} poin dari periode sebelumnya (${prev.skorTotal} ke ${curr.skorTotal}). Mari fokus pada rekomendasi saran aspek terendah agar kembali meningkat di supervisi berikutnya!`;
+      narasiPerkembangan = `Terdapat selisih ${diff} poin dibandingkan periode sebelumnya (${prev.skorTotal} ke ${curr.skorTotal}). Prioritaskan aspek dengan skor terendah sesuai rekomendasi pembinaan Kepala Sekolah.`;
     }
   }
 
   return NextResponse.json({
     guru,
+    perangkatTerbaru,
     penugasan: penugasanList,
     hasilTerakhir,
     hasilSelesai,

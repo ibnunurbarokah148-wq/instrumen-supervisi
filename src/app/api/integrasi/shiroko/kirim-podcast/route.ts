@@ -1,41 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
+import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getAllSettingsDecrypted, logActivity } from "@/lib/settings";
+import { generatePdfBuffer } from "@/lib/export-doc";
+import { triggerShirokoWebhook } from "@/lib/ai-evaluator";
 
+/**
+ * Endpoint Bot WhatsApp (Shiroko) & Pengiriman Laporan Web-to-WA.
+ * Mengirimkan Laporan Resmi PDF (Base64) beserta Ringkasan Hasil & RTL Pengawas ke Bot WhatsApp
+ * agar guru/supervisor bisa mengambil hasil supervisi langsung dari WA tanpa membuka web.
+ * (Path URL dipertahankan untuk kompatibilitas endpoint bot WA pengguna).
+ */
 export async function POST(req: NextRequest) {
   try {
     const settings = await getAllSettingsDecrypted();
     const apiKeyHeader = req.headers.get("x-api-key") || "";
+    const session = await getSession();
 
-    if (
-      settings.shiroko_secret &&
-      apiKeyHeader !== settings.shiroko_secret
-    ) {
+    const authorizedByApiKey =
+      !settings.shiroko_secret || apiKeyHeader === settings.shiroko_secret;
+
+    if (!session && (!apiKeyHeader || !authorizedByApiKey)) {
       return NextResponse.json(
-        { error: "Unauthorized: x-api-key tidak valid." },
+        {
+          error:
+            "Unauthorized: Diperlukan sesi login atau header x-api-key Bot WA yang valid.",
+        },
         { status: 401 }
       );
     }
 
     const body = await req.json();
-    const { nomorWA, hasilId, podcastId } = body;
+    const { nomorWA, hasilId, penugasanId } = body;
 
-    let podcast = null;
-    if (podcastId || hasilId) {
-      podcast = await prisma.podcast.findFirst({
+    let hasil = null;
+
+    if (hasilId || penugasanId) {
+      hasil = await prisma.hasil.findFirst({
         where: {
           OR: [
-            podcastId ? { id: String(podcastId) } : undefined,
-            hasilId ? { hasilId: String(hasilId) } : undefined,
-          ].filter(Boolean) as { id?: string; hasilId?: string }[],
+            hasilId ? { id: String(hasilId) } : undefined,
+            penugasanId ? { penugasanId: String(penugasanId) } : undefined,
+          ].filter(Boolean) as { id?: string; penugasanId?: string }[],
         },
         include: {
-          hasil: {
-            include: {
-              penugasan: { include: { guru: true, instrumen: true } },
-            },
+          penugasan: {
+            include: { guru: true, instrumen: true },
           },
         },
       });
@@ -46,6 +56,7 @@ export async function POST(req: NextRequest) {
         : cleanNomor.startsWith("0")
         ? cleanNomor.slice(1)
         : cleanNomor;
+
       const guru = await prisma.user.findFirst({
         where: {
           role: "guru",
@@ -55,69 +66,170 @@ export async function POST(req: NextRequest) {
           ],
         },
       });
+
       if (guru) {
         const lastPenugasan = await prisma.penugasan.findFirst({
-          where: { guruId: guru.id, status: "selesai" },
+          where: {
+            guruId: guru.id,
+            hasil: { isNot: null },
+          },
           include: {
             guru: true,
             instrumen: true,
-            hasil: { include: { podcast: true } },
+            hasil: true,
           },
           orderBy: { updatedAt: "desc" },
         });
-        if (lastPenugasan?.hasil?.podcast) {
-          podcast = {
-            ...lastPenugasan.hasil.podcast,
-            hasil: {
-              ...lastPenugasan.hasil,
-              penugasan: lastPenugasan,
-            },
+        if (lastPenugasan?.hasil) {
+          hasil = {
+            ...lastPenugasan.hasil,
+            penugasan: lastPenugasan,
           };
         }
       }
     }
 
-    if (!podcast || !podcast.audioPath) {
+    if (!hasil) {
       return NextResponse.json(
         {
           error:
-            "File audio podcast Fish Audio untuk guru tersebut belum tersedia.",
+            "Laporan hasil supervisi untuk guru tersebut belum tersedia.",
         },
         { status: 404 }
       );
     }
 
-    const storageDir = path.join(process.cwd(), "storage", "podcast");
-    const fileName = podcast.audioPath;
-    const audioBuffer = await fs.readFile(path.join(storageDir, fileName));
+    const guru = hasil.penugasan.guru;
+    const skorPerAspek = (() => {
+      try {
+        return JSON.parse(hasil.skorPerAspekJSON || "[]");
+      } catch {
+        return [];
+      }
+    })();
+    const kekuatan = (() => {
+      try {
+        return JSON.parse(hasil.kekuatanJSON || "[]");
+      } catch {
+        return [];
+      }
+    })();
+    const saran = (() => {
+      try {
+        return JSON.parse(hasil.sarannyaJSON || "[]");
+      } catch {
+        return [];
+      }
+    })();
 
-    const guru = podcast.hasil.penugasan.guru;
-    const base64Audio = audioBuffer.toString("base64");
+    const pdfBuffer = generatePdfBuffer(
+      {
+        id: hasil.id,
+        namaGuru: guru.nama,
+        nipGuru: guru.nip || "-",
+        emailGuru: guru.email,
+        mapelGuru: guru.mapel || "Umum",
+        judulInstrumen: hasil.penugasan.instrumen.judul,
+        versiInstrumen: hasil.penugasan.instrumen.versi,
+        tanggalEvaluasi: new Date(hasil.createdAt).toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        }),
+        skorTotal: hasil.skorTotal,
+        skorAsliAI: hasil.skorAsliAI,
+        predikat: hasil.predikat,
+        kesimpulan: hasil.kesimpulan,
+        kekuatan,
+        saran,
+        skorPerAspek,
+        catatanAdmin: hasil.catatanAdmin,
+        diubahAdminOleh: hasil.diubahAdminOleh,
+        disahkan: hasil.disahkan,
+        disahkanOleh: hasil.disahkanOleh,
+        disahkanNip: hasil.disahkanNip,
+        disahkanPada: hasil.disahkanPada
+          ? new Date(hasil.disahkanPada).toLocaleDateString("id-ID")
+          : null,
+        nomorRegistrasi: hasil.nomorRegistrasi,
+        rtlRekomendasi: hasil.rtlRekomendasi,
+        rtlTarget: hasil.rtlTarget,
+        rtlTenggat: hasil.rtlTenggat,
+        rtlProgres: hasil.rtlProgres,
+        pengawasNama: hasil.pengawasNama,
+        pengawasNip: hasil.pengawasNip,
+      },
+      settings.dokumen_template_json
+    );
+
+    const safeName = guru.nama.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 30);
+    const fileName = `Laporan_Supervisi_${safeName}.pdf`;
+    const pdfBase64 = pdfBuffer.toString("base64");
+
+    const caption =
+      `📋 *LAPORAN RESMI SUPERVISI AKADEMIK (SIPENA)*\n\n` +
+      `Guru: *${guru.nama}*\n` +
+      `Instrumen: *${hasil.penugasan.instrumen.judul}*\n` +
+      `Nilai Akhir: *${hasil.skorTotal} / 100 (${hasil.predikat})*\n` +
+      `Status: *${hasil.disahkan ? "Disahkan Kepala Sekolah" : "Draf Review"}*\n` +
+      (hasil.nomorRegistrasi ? `No. Reg: ${hasil.nomorRegistrasi}\n` : "") +
+      `\n📝 *Kesimpulan & Temuan:*\n${hasil.kesimpulan}\n` +
+      (hasil.catatanAdmin
+        ? `\n👨‍🏫 *Catatan Kepala Sekolah:*\n${hasil.catatanAdmin}\n`
+        : "") +
+      (hasil.rtlRekomendasi
+        ? `\n🎯 *RTL Pengawas:*\n${hasil.rtlRekomendasi} (Target: ${hasil.rtlTarget || "-"}, Progres: ${hasil.rtlProgres})\n`
+        : "");
+
+    let webhookSent = false;
+    if (settings.shiroko_enabled === "true" && settings.shiroko_url) {
+      const wh = await triggerShirokoWebhook({
+        event: "kirim_laporan_supervisi_wa",
+        nomorWA: guru.nomorWA,
+        guru: {
+          nama: guru.nama,
+          nip: guru.nip,
+          mapel: guru.mapel,
+          nomorWA: guru.nomorWA,
+        },
+        hasilId: hasil.id,
+        skorTotal: hasil.skorTotal,
+        predikat: hasil.predikat,
+        disahkan: hasil.disahkan,
+        caption,
+        fileName,
+        mimeType: "application/pdf",
+        pdfBase64,
+      }).catch(() => ({ ok: false, status: 0 }));
+      webhookSent = wh.ok;
+    }
 
     await logActivity({
       userId: guru.id,
-      namaUser: "Bot Shiroko",
-      role: "system",
-      aksi: "SHIROKO_KIRIM_PODCAST",
-      detail: `Mengirim file audio podcast Fish Audio ke WhatsApp ${guru.nama} (${
-        guru.nomorWA || "-"
-      })`,
+      namaUser: session?.nama || "Bot WhatsApp Shiroko",
+      role: session?.role || "system",
+      aksi: "WA_BOT_KIRIM_LAPORAN",
+      detail: `Mengirim Laporan PDF & Ringkasan Supervisi ke WhatsApp ${guru.nama} (${guru.nomorWA || "-"})`,
     });
 
     return NextResponse.json({
       success: true,
+      webhookSent,
       guru: {
         nama: guru.nama,
         nomorWA: guru.nomorWA,
       },
-      instrumen: podcast.hasil.penugasan.instrumen.judul,
-      skorTotal: podcast.hasil.skorTotal,
-      predikat: podcast.hasil.predikat,
-      durasiDetik: podcast.durasi,
-      mimeType: fileName.endsWith(".mp3") ? "audio/mpeg" : "audio/wav",
+      instrumen: hasil.penugasan.instrumen.judul,
+      skorTotal: hasil.skorTotal,
+      predikat: hasil.predikat,
+      disahkan: hasil.disahkan,
+      mimeType: "application/pdf",
       fileName,
-      audioBase64: base64Audio,
-      caption: `🌸 *Podcast Evaluasi Sensei-AI*\nHalo ${guru.nama}-sensei! Berikut rekaman podcast hasil supervisi *${podcast.hasil.penugasan.instrumen.judul}* (Skor: *${podcast.hasil.skorTotal}/100 - ${podcast.hasil.predikat}*). Selamat mendengarkan! ✨`,
+      pdfBase64,
+      caption,
+      message: webhookSent
+        ? `Laporan PDF & ringkasan berhasil dikirim ke Bot WA (${guru.nomorWA || "-"})!`
+        : `Paket laporan PDF & ringkasan WhatsApp siap diambil oleh Bot WA (Webhook aktifkan di Pengaturan API untuk push otomatis).`,
     });
   } catch (err: unknown) {
     return NextResponse.json(

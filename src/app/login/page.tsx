@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SenseiMascot } from "@/components/SenseiMascot";
+import { RoleSwitcher } from "@/components/RoleSwitcher";
 import {
   GraduationCap,
   LogIn,
@@ -17,8 +18,8 @@ import {
 export default function GuruLoginPage() {
   const router = useRouter();
   const [tab, setTab] = useState<"login" | "register">("login");
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
+  const [identifier, setIdentifier] = useState("budi@sekolah.sch.id");
+  const [password, setPassword] = useState("guru123");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -99,29 +100,29 @@ export default function GuruLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sora-50 via-white to-sakura-50 flex flex-col justify-center items-center p-4 sm:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-emerald-50/30 flex flex-col justify-center items-center p-4 sm:p-6">
       <div className="w-full max-w-md">
-        {/* Mascot Greeting Card */}
-        <div className="text-center mb-6">
+        <div className="text-center mb-5">
           <div className="inline-flex justify-center mb-2">
-            <SenseiMascot size="lg" mood="happy" />
+            <SenseiMascot size="md" mood="happy" />
           </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sora-100 text-sora-700 text-xs font-bold">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold">
             <GraduationCap className="w-3.5 h-3.5" />
-            Portal Khusus Guru (/login)
+            Portal Pendidik & Guru (/login)
           </div>
           <h1 className="font-display font-extrabold text-2xl text-slate-900 mt-2">
-            Okaerinasai, Sensei! 🌸
+            Masuk Portal Supervisi Guru
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 mt-1">
-            Masuk untuk mengisi instrumen supervisi dan mendengarkan podcast evaluasi dari Sensei-AI.
+            SIPENA • Unggah perangkat ajar, isi evaluasi diri, dan pantau
+            umpan balik Kepala Sekolah serta Pengawas.
           </p>
         </div>
 
-        {/* Main Card */}
-        <div className="bg-white/95 backdrop-blur rounded-3xl border border-sora-200 shadow-pastel p-6 sm:p-7">
+        {/* Kartu Utama */}
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-lg p-6 sm:p-7">
           {/* Tab Switcher */}
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-2xl mb-6">
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-2xl mb-5">
             <button
               type="button"
               onClick={() => {
@@ -131,7 +132,7 @@ export default function GuruLoginPage() {
               }}
               className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition ${
                 tab === "login"
-                  ? "bg-white text-sora-700 shadow-sm"
+                  ? "bg-white text-blue-700 shadow-xs"
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
@@ -147,7 +148,7 @@ export default function GuruLoginPage() {
               }}
               className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition ${
                 tab === "register"
-                  ? "bg-white text-sakura-600 shadow-sm"
+                  ? "bg-white text-emerald-700 shadow-xs"
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
@@ -181,8 +182,8 @@ export default function GuruLoginPage() {
                   required
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="Contoh: aulia@sekolah.sch.id atau NIP"
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/60 text-sm focus:outline-none focus:ring-2 focus:ring-sora-400 focus:bg-white transition"
+                  placeholder="Contoh: budi@sekolah.sch.id atau NIP"
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/60 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
                 />
               </div>
 
@@ -197,7 +198,7 @@ export default function GuruLoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Masukkan password"
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/60 text-sm focus:outline-none focus:ring-2 focus:ring-sora-400 focus:bg-white transition pr-10"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/60 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition pr-10"
                   />
                   <button
                     type="button"
@@ -216,10 +217,20 @@ export default function GuruLoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-sora-500 to-sakura-500 text-white font-bold text-sm shadow-md hover:opacity-95 disabled:opacity-50 transition"
+                className="w-full py-3.5 rounded-2xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-sm shadow-sm disabled:opacity-50 transition"
               >
-                {loading ? "Sedang Memeriksa Sesi..." : "Masuk ke Dashboard Guru ✨"}
+                {loading ? "Sedang Memeriksa Sesi..." : "Masuk ke Dashboard Guru"}
               </button>
+
+              {/* Akses Cepat Demo 1-Klik */}
+              <div className="pt-3 border-t border-slate-100 text-center space-y-2">
+                <p className="text-[11px] font-bold text-slate-500">
+                  Akses Cepat Demo 4 Peran (1-Klik Presentasi)
+                </p>
+                <div className="flex justify-center">
+                  <RoleSwitcher />
+                </div>
+              </div>
             </form>
           ) : (
             <form onSubmit={handleRegister} className="space-y-3.5">
@@ -279,7 +290,7 @@ export default function GuruLoginPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Nomor WhatsApp
+                    Nomor WhatsApp (Bot WA)
                   </label>
                   <input
                     type="text"
@@ -307,26 +318,26 @@ export default function GuruLoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-2xl bg-sakura-500 hover:bg-sakura-600 text-white font-bold text-sm shadow-md transition"
+                className="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm transition"
               >
                 {loading ? "Mengirim..." : "Ajukan Pendaftaran Guru"}
               </button>
               <p className="text-[11px] text-slate-500 text-center">
-                Sesuai ketentuan sistem, pendaftaran mandiri akan diverifikasi oleh Admin sebelum aktif.
+                Pendaftaran mandiri akan diverifikasi oleh Admin sebelum aktif.
               </p>
             </form>
           )}
         </div>
 
-        <div className="mt-6 flex items-center justify-between text-xs text-slate-500 px-2">
-          <Link href="/" className="hover:text-sora-600 font-semibold">
+        <div className="mt-5 flex items-center justify-between text-xs text-slate-500 px-2">
+          <Link href="/" className="hover:text-blue-700 font-semibold">
             ← Kembali ke Beranda
           </Link>
           <Link
             href="/admin/login"
-            className="hover:text-slate-800 font-semibold"
+            className="hover:text-slate-900 font-semibold"
           >
-            Login sebagai Admin →
+            Login Pimpinan / Admin →
           </Link>
         </div>
       </div>

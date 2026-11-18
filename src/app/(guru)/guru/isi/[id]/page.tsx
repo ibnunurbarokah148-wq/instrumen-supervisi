@@ -1,130 +1,240 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { SenseiMascot } from "@/components/SenseiMascot";
 import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
-  CloudUpload,
-  Sparkles,
-  AlertCircle,
+  Loader2,
+  Save,
   Send,
+  Sparkles,
+  AlertTriangle,
+  Clock,
+  Lock,
+  ChevronDown,
+  ChevronUp,
+  FolderCheck,
 } from "lucide-react";
+import { SenseiMascot } from "@/components/SenseiMascot";
+import { WorkflowStepper } from "@/components/WorkflowStepper";
 
-interface Question {
+interface PertanyaanItem {
   id: string;
-  teks: string;
-  tipe: "skala" | "pilihan_ganda" | "ya_tidak" | "isian_singkat" | "esai";
-  aspek: string;
-  bobot: number;
   urutan: number;
+  aspek: string;
+  tipe: string;
+  bobot: number;
   wajib: boolean;
+  teks: string;
   opsiJSON: string;
 }
 
-export default function GuruIsiFormPage() {
+interface AnswerEntry {
+  nilai: string;
+  catatan: string;
+  buktiUrl: string;
+}
+
+interface PenugasanDetail {
+  id: string;
+  status: string;
+  catatanVerifikasi?: string | null;
+  diverifikasiOleh?: string | null;
+  instrumen: {
+    id: string;
+    judul: string;
+    deskripsi?: string | null;
+    versi: number;
+    pertanyaan: PertanyaanItem[];
+  };
+  jawaban: Array<{
+    pertanyaanId: string;
+    nilaiJSON: string;
+  }>;
+  hasil?: {
+    id: string;
+    disahkan: boolean;
+    rtlRekomendasi?: string | null;
+  } | null;
+}
+
+function normalizeAnswer(raw: string): AnswerEntry {
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      "nilai" in parsed
+    ) {
+      return {
+        nilai: parsed.nilai === null || parsed.nilai === undefined ? "" : String(parsed.nilai),
+        catatan: typeof parsed.catatan === "string" ? parsed.catatan : "",
+        buktiUrl: typeof parsed.buktiUrl === "string" ? parsed.buktiUrl : "",
+      };
+    }
+    if (Array.isArray(parsed)) {
+      return { nilai: parsed.join(", "), catatan: "", buktiUrl: "" };
+    }
+    return {
+      nilai: parsed === null || parsed === undefined ? "" : String(parsed),
+      catatan: "",
+      buktiUrl: "",
+    };
+  } catch {
+    return { nilai: raw, catatan: "", buktiUrl: "" };
+  }
+}
+
+export default function IsiInstrumenPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const penugasanId = params.id;
 
-  const [judul, setJudul] = useState("");
-  const [deskripsi, setDeskripsi] = useState("");
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [answers, setAnswers] = useState<Record<string, unknown>>({});
-
-  const [stepIdx, setStepIdx] = useState(0);
-  const [confirmScreen, setConfirmScreen] = useState(false);
+  const [detail, setDetail] = useState<PenugasanDetail | null>(null);
+  const [perangkat, setPerangkat] = useState<{
+    judulPembelajaran: string;
+    statusVerifikasi: string;
+  } | null>(null);
+  const [answers, setAnswers] = useState<Record<string, AnswerEntry>>({});
+  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+  const [activeAspectIdx, setActiveAspectIdx] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [autoSaveText, setAutoSaveText] = useState("Draft siap disimpan otomatis");
-  const [submitting, setSubmitting] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [submittingMode, setSubmittingMode] = useState<"verifikasi" | "ai" | null>(
+    null
+  );
   const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const res = await fetch(`/api/guru/penugasan/${penugasanId}`);
-      if (res.ok) {
-        const data = await res.json();
-        const p = data.penugasan;
-        // Jika supervisi sudah berstatus selesai, langsung arahkan ke halaman hasil
-        if (p.status === "selesai") {
+    fetch(`/api/guru/penugasan/${penugasanId}`)
+      .then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Gagal memuat instrumen.");
+        return d;
+      })
+      .then((d) => {
+        const p: PenugasanDetail = d.penugasan;
+        setDetail(p);
+        setPerangkat(d.perangkatTerbaru || null);
+
+        if (p.hasil?.disahkan || p.status === "selesai" || p.status === "tindak_lanjut") {
           router.replace(`/guru/hasil/${penugasanId}`);
           return;
         }
 
-        setJudul(p.instrumen.judul);
-        setDeskripsi(p.instrumen.deskripsi);
-        setQuestions(p.instrumen.pertanyaan || []);
-
-        const initialAns: Record<string, unknown> = {};
+        const initAnswers: Record<string, AnswerEntry> = {};
+        const initExpanded: Record<string, boolean> = {};
         for (const j of p.jawaban || []) {
-          try {
-            initialAns[j.pertanyaanId] = JSON.parse(j.nilaiJSON);
-          } catch {
-            initialAns[j.pertanyaanId] = j.nilaiJSON;
+          const entry = normalizeAnswer(j.nilaiJSON);
+          initAnswers[j.pertanyaanId] = entry;
+          if (entry.catatan || entry.buktiUrl) {
+            initExpanded[j.pertanyaanId] = true;
           }
         }
-        setAnswers(initialAns);
-      }
-      setLoading(false);
-    })();
+        setAnswers(initAnswers);
+        setExpandedNotes(initExpanded);
+      })
+      .catch((e) => setErrorMsg(e.message))
+      .finally(() => setLoading(false));
   }, [penugasanId, router]);
 
-  // Kelompokkan pertanyaan per aspek (PRD Bagian 6.2: satu aspek per langkah)
-  const aspectGroups = React.useMemo(() => {
-    const map = new Map<string, Question[]>();
-    for (const q of questions) {
-      const a = q.aspek || "Umum";
-      if (!map.has(a)) map.set(a, []);
-      map.get(a)!.push(q);
+  const aspectGroups = useMemo(() => {
+    if (!detail) return [];
+    const groups: { aspek: string; items: PertanyaanItem[] }[] = [];
+    for (const q of detail.instrumen.pertanyaan) {
+      const existing = groups.find((g) => g.aspek === q.aspek);
+      if (existing) existing.items.push(q);
+      else groups.push({ aspek: q.aspek, items: [q] });
     }
-    return Array.from(map.entries()).map(([aspek, items]) => ({
-      aspek,
-      items,
-    }));
-  }, [questions]);
+    return groups;
+  }, [detail]);
 
-  const saveDraft = async (nextAnswers: Record<string, unknown>) => {
+  const scheduleAutoSave = (nextAnswers: Record<string, AnswerEntry>) => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        setSavingDraft(true);
+        const res = await fetch(`/api/guru/penugasan/${penugasanId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "draft", answers: nextAnswers }),
+        });
+        if (res.ok) {
+          setLastSaved(
+            new Date().toLocaleTimeString("id-ID", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          );
+        }
+      } finally {
+        setSavingDraft(false);
+      }
+    }, 1000);
+  };
+
+  const updateAnswerField = (
+    pertanyaanId: string,
+    patch: Partial<AnswerEntry>
+  ) => {
+    setErrorMsg("");
+    setAnswers((prev) => {
+      const current = prev[pertanyaanId] || {
+        nilai: "",
+        catatan: "",
+        buktiUrl: "",
+      };
+      const next = {
+        ...prev,
+        [pertanyaanId]: { ...current, ...patch },
+      };
+      scheduleAutoSave(next);
+      return next;
+    });
+  };
+
+  const handleSaveDraftManual = async () => {
+    setSavingDraft(true);
+    setErrorMsg("");
     try {
-      setAutoSaveText("Menyimpan draft...");
       const res = await fetch(`/api/guru/penugasan/${penugasanId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "draft",
-          answers: nextAnswers,
-        }),
+        body: JSON.stringify({ action: "draft", answers }),
       });
-      if (res.ok) {
-        const nowStr = new Date().toLocaleTimeString("id-ID", {
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal menyimpan draf.");
+      setLastSaved(
+        new Date().toLocaleTimeString("id-ID", {
           hour: "2-digit",
           minute: "2-digit",
-          second: "2-digit",
-        });
-        setAutoSaveText(`Draft tersimpan otomatis pukul ${nowStr}`);
-      }
-    } catch {
-      setAutoSaveText("Draft tersimpan secara lokal");
+        })
+      );
+      setSuccessMsg("Draf evaluasi diri berhasil disimpan.");
+    } catch (e: unknown) {
+      setErrorMsg(e instanceof Error ? e.message : "Gagal menyimpan draf.");
+    } finally {
+      setSavingDraft(false);
     }
   };
 
-  const handleAnswerChange = (qId: string, val: unknown) => {
-    setErrorMsg("");
-    const next = { ...answers, [qId]: val };
-    setAnswers(next);
-    saveDraft(next);
-  };
-
-  const validateCurrentStep = (): boolean => {
-    const currentGroup = aspectGroups[stepIdx];
-    if (!currentGroup) return true;
-    for (const q of currentGroup.items) {
+  const validateRequired = (): boolean => {
+    if (!detail) return false;
+    for (const q of detail.instrumen.pertanyaan) {
       if (q.wajib) {
-        const v = answers[q.id];
-        if (v === undefined || v === null || String(v).trim() === "") {
+        const val = answers[q.id]?.nilai?.trim();
+        if (!val) {
+          const idx = aspectGroups.findIndex((g) => g.aspek === q.aspek);
+          if (idx >= 0) setActiveAspectIdx(idx);
           setErrorMsg(
-            `Mohon lengkapi pertanyaan wajib nomor #${q.urutan} pada aspek ${q.aspek} sebelum melanjutkan.`
+            `Indikator wajib nomor ${q.urutan} pada aspek "${q.aspek}" belum diisi.`
           );
           return false;
         }
@@ -133,40 +243,45 @@ export default function GuruIsiFormPage() {
     return true;
   };
 
-  const handleNextStep = () => {
-    if (!validateCurrentStep()) return;
-    if (stepIdx < aspectGroups.length - 1) {
-      setStepIdx((s) => s + 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } else {
-      setConfirmScreen(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+  const handleSubmitVerifikasi = async () => {
+    if (!validateRequired()) return;
+    setErrorMsg("");
+    setSuccessMsg("");
+    setSubmittingMode("verifikasi");
+    try {
+      const res = await fetch(`/api/guru/penugasan/${penugasanId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "submit_verifikasi",
+          answers,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal mengajukan verifikasi.");
+      setSuccessMsg(
+        json.message ||
+          "Evaluasi diri berhasil diajukan ke Kepala Sekolah untuk tahap verifikasi & penilaian."
+      );
+      setDetail((prev) =>
+        prev
+          ? { ...prev, status: json.status || "menunggu_verifikasi", catatanVerifikasi: null }
+          : prev
+      );
+    } catch (e: unknown) {
+      setErrorMsg(
+        e instanceof Error ? e.message : "Gagal mengirim pengajuan verifikasi."
+      );
+    } finally {
+      setSubmittingMode(null);
     }
   };
 
-  // Fallback Polling jika submit sedang berjalan agar jika koneksi browser terputus tetap otomatis redirect saat selesai
-  useEffect(() => {
-    if (!submitting) return;
-    const interval = setInterval(async () => {
-      try {
-        const checkRes = await fetch(`/api/guru/penugasan/${penugasanId}`);
-        if (checkRes.ok) {
-          const checkData = await checkRes.json();
-          if (checkData.penugasan?.status === "selesai") {
-            clearInterval(interval);
-            router.push(`/guru/hasil/${penugasanId}`);
-          }
-        }
-      } catch {
-        // ignore network hiccup during polling
-      }
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [submitting, penugasanId, router]);
-
-  const handleFinalSubmit = async () => {
+  const handleSubmitWithAI = async () => {
+    if (!validateRequired()) return;
     setErrorMsg("");
-    setSubmitting(true);
+    setSuccessMsg("");
+    setSubmittingMode("ai");
     try {
       const res = await fetch(`/api/guru/penugasan/${penugasanId}`, {
         method: "POST",
@@ -176,363 +291,492 @@ export default function GuruIsiFormPage() {
           answers,
         }),
       });
-      const data = await res.json();
+      const json = await res.json();
       if (!res.ok) {
-        setErrorMsg(data.error || "Gagal mengevaluasi jawaban.");
-        setSubmitting(false);
-        return;
+        throw new Error(
+          json.error ||
+            "Gagal menyusun draf analisis AI Co-Evaluator. Anda dapat menekan 'Ajukan Verifikasi Kepala Sekolah' tanpa AI."
+        );
       }
       router.push(`/guru/hasil/${penugasanId}`);
-    } catch {
-      // Periksa apakah di database evaluasi sebenarnya sudah berhasil disimpan
-      try {
-        const checkRes = await fetch(`/api/guru/penugasan/${penugasanId}`);
-        if (checkRes.ok) {
-          const checkData = await checkRes.json();
-          if (checkData.penugasan?.status === "selesai") {
-            router.push(`/guru/hasil/${penugasanId}`);
-            return;
-          }
-        }
-      } catch {
-        // ignore
-      }
-      setErrorMsg("Koneksi ke server terputus. Silakan muat ulang halaman untuk melihat status terbaru.");
-      setSubmitting(false);
+    } catch (e: unknown) {
+      setErrorMsg(
+        e instanceof Error ? e.message : "Gagal menyusun draf AI Co-Evaluator."
+      );
+      setSubmittingMode(null);
     }
   };
 
   if (loading) {
     return (
-      <div className="p-12 text-center">
-        <SenseiMascot size="lg" mood="thinking" className="mx-auto mb-3" />
+      <div className="p-10 text-center space-y-3 bg-white rounded-2xl border border-slate-200">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
         <p className="text-sm font-bold text-slate-600">
-          Menyiapkan lembar instrumen supervisi...
+          Memuat instrumen supervisi akademik...
         </p>
       </div>
     );
   }
 
-  // Animasi Penuh "Sensei-AI sedang menganalisis" saat Submit (PRD Bagian 6.2)
-  if (submitting) {
+  if (!detail) {
     return (
-      <div className="fixed inset-0 z-50 bg-gradient-to-br from-sora-50 via-white to-sakura-50 flex flex-col items-center justify-center p-6 text-center">
-        <SenseiMascot size="xl" mood="thinking" className="mb-5" />
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-sakura-100 text-sakura-700 text-xs font-extrabold mb-3">
-          <Sparkles className="w-4 h-4 animate-spin" />
-          Evaluator AI & Fish Audio TTS Aktif
-        </div>
-        <h2 className="font-display font-extrabold text-2xl sm:text-3xl text-slate-900">
-          Sensei-AI Sedang Menganalisis Jawaban Anda...
-        </h2>
-        <p className="text-sm text-slate-600 max-w-md mt-2 leading-relaxed">
-          Mohon tunggu sebentar ya, Sensei! Sensei-AI sedang menghitung skor per
-          aspek, menyusun saran pengembangan diri, dan meracik audio podcast
-          khusus untuk Anda. 🌸
-        </p>
-        <div className="w-64 h-2.5 bg-sora-100 rounded-full overflow-hidden mt-6">
-          <div className="h-full bg-gradient-to-r from-sora-500 to-sakura-500 animate-pulse w-4/5 rounded-full" />
-        </div>
+      <div className="p-6 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-sm">
+        {errorMsg || "Instrumen tidak ditemukan."}
       </div>
     );
   }
 
-  const totalSteps = aspectGroups.length;
-  const progressPercent = confirmScreen
-    ? 100
-    : totalSteps > 0
-    ? Math.round(((stepIdx + 1) / totalSteps) * 100)
-    : 100;
+  const currentGroup = aspectGroups[activeAspectIdx];
+  const totalQ = detail.instrumen.pertanyaan.length;
+  const filledCount = detail.instrumen.pertanyaan.filter(
+    (q) => answers[q.id]?.nilai?.trim()
+  ).length;
+  const isLocked = Boolean(detail.hasil?.disahkan);
 
   return (
     <div className="space-y-5">
-      {/* Header Progress Bar & Status Auto-save */}
-      <div className="bg-white rounded-3xl border border-sora-200 p-5 shadow-card space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-sora-600">
-              {confirmScreen
-                ? "Konfirmasi Akhir Sebelum Evaluasi AI"
-                : `Langkah ${stepIdx + 1} dari ${totalSteps} • Aspek ${
-                    aspectGroups[stepIdx]?.aspek || ""
-                  }`}
-            </span>
-            <h2 className="font-display font-bold text-base sm:text-lg text-slate-900">
-              {judul}
-            </h2>
+      {/* Overlay AI Co-Evaluator */}
+      {submittingMode === "ai" && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="max-w-md w-full rounded-3xl bg-white p-6 text-center space-y-4 shadow-2xl border border-blue-200">
+            <SenseiMascot size="lg" mood="thinking" className="mx-auto" />
+            <h3 className="font-display font-extrabold text-lg text-slate-900">
+              Menyusun Draf Analisis Asisten AI...
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+              Asisten AI Supervisi sedang memetakan evaluasi diri, catatan
+              keterlaksanaan, dan kelengkapan perangkat ajar Anda menjadi draf
+              evaluasi awal untuk ditelaah oleh{" "}
+              <strong>Kepala Sekolah</strong>.
+            </p>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Memproses 4 aspek instrumen...
+            </div>
           </div>
-
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
-            <CloudUpload className="w-3.5 h-3.5" />
-            {autoSaveText}
-          </span>
         </div>
+      )}
 
-        {/* Progress Bar */}
-        <div className="w-full h-2.5 bg-sora-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-sora-500 to-sakura-500 transition-all duration-300 rounded-full"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
+      {/* Top Breadcrumb & Status */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link
+          href="/guru/isi"
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Kembali ke Daftar Instrumen
+        </Link>
 
-        {/* Tab Langkah Aspek */}
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {aspectGroups.map((g, i) => (
-            <button
-              key={g.aspek}
-              type="button"
-              onClick={() => {
-                setConfirmScreen(false);
-                setStepIdx(i);
-              }}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
-                !confirmScreen && stepIdx === i
-                  ? "bg-sora-500 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-sora-50"
-              }`}
-            >
-              {i + 1}. {g.aspek}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 text-xs">
+          {savingDraft ? (
+            <span className="inline-flex items-center gap-1 text-blue-600 font-bold">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Menyimpan draf...
+            </span>
+          ) : lastSaved ? (
+            <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Draf tersimpan ({lastSaved})
+            </span>
+          ) : null}
         </div>
       </div>
 
+      {/* Header Instrumen + Stepper */}
+      <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="font-display font-extrabold text-lg sm:text-xl text-slate-900">
+              {detail.instrumen.judul}
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Terisi {filledCount} dari {totalQ} indikator • Skala Rubrik 1–4
+              Standar Proses
+            </p>
+          </div>
+          {perangkat ? (
+            <Link
+              href="/guru/perangkat"
+              className={`px-3 py-1.5 rounded-xl border text-xs font-bold inline-flex items-center gap-1.5 shrink-0 ${
+                perangkat.statusVerifikasi === "lengkap"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  : perangkat.statusVerifikasi === "perlu_revisi"
+                  ? "bg-rose-50 border-rose-200 text-rose-800"
+                  : "bg-amber-50 border-amber-200 text-amber-800"
+              }`}
+            >
+              <FolderCheck className="w-3.5 h-3.5" />
+              Perangkat:{" "}
+              {perangkat.statusVerifikasi === "lengkap"
+                ? "Lengkap"
+                : perangkat.statusVerifikasi === "perlu_revisi"
+                ? "Perlu Revisi"
+                : "Menunggu Verifikasi"}
+            </Link>
+          ) : (
+            <Link
+              href="/guru/perangkat"
+              className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold inline-flex items-center gap-1.5 shrink-0"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Belum Ada Perangkat Ajar
+            </Link>
+          )}
+        </div>
+
+        <WorkflowStepper
+          status={detail.status}
+          disahkan={detail.hasil?.disahkan}
+          hasRtl={Boolean(detail.hasil?.rtlRekomendasi)}
+        />
+
+        {detail.status === "perlu_revisi" && detail.catatanVerifikasi && (
+          <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-2.5 text-xs text-rose-900">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="font-bold">
+                Catatan Revisi ({detail.diverifikasiOleh || "Kepala Sekolah"}):
+              </strong>{" "}
+              {detail.catatanVerifikasi}
+            </div>
+          </div>
+        )}
+
+        {detail.status === "menunggu_verifikasi" && (
+          <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-xs text-amber-900">
+            <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              Berkas evaluasi diri Anda sedang{" "}
+              <strong>Menunggu Verifikasi Kepala Sekolah</strong>. Anda tetap
+              dapat menyempurnakan catatan sebelum Kepala Sekolah mengesahkan
+              penilaian akhir.
+            </div>
+          </div>
+        )}
+
+        {isLocked && (
+          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-2 text-xs text-emerald-900">
+            <span className="inline-flex items-center gap-2 font-bold">
+              <Lock className="w-4 h-4 text-emerald-600" />
+              Laporan ini telah disahkan permanen (Immutable).
+            </span>
+            <Link
+              href={`/guru/hasil/${penugasanId}`}
+              className="underline font-bold"
+            >
+              Buka Rapor Resmi
+            </Link>
+          </div>
+        )}
+      </div>
+
+      {/* Navigasi Aspek */}
+      <div className="flex flex-wrap gap-2">
+        {aspectGroups.map((g, idx) => {
+          const doneInGroup = g.items.filter((q) => answers[q.id]?.nilai?.trim()).length;
+          const active = idx === activeAspectIdx;
+          return (
+            <button
+              key={g.aspek}
+              type="button"
+              onClick={() => setActiveAspectIdx(idx)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition flex items-center gap-2 ${
+                active
+                  ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <span>
+                {idx + 1}. {g.aspek}
+              </span>
+              <span
+                className={`px-1.5 py-0.5 rounded-md text-[10px] ${
+                  active ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                {doneInGroup}/{g.items.length}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {errorMsg && (
-        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm font-bold flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 shrink-0" />
+        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm font-medium flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
           <span>{errorMsg}</span>
         </div>
       )}
 
-      {/* Layar Konfirmasi Sebelum Submit (PRD Bagian 6.2) */}
-      {confirmScreen ? (
-        <div className="bg-white rounded-3xl border-2 border-sora-300 p-6 shadow-pastel space-y-5">
-          <div className="flex items-center gap-4">
-            <SenseiMascot size="md" mood="cheer" />
-            <div>
-              <h3 className="font-display font-bold text-lg text-slate-900">
-                Layar Konfirmasi Jawaban Supervisi
-              </h3>
-              <p className="text-xs text-slate-600">
-                Periksa kembali ringkasan jawaban Anda. Setelah dikirim, Sensei-AI akan mengevaluasi dan membuatkan podcast suara untuk Anda.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-            {questions.map((q) => {
-              const val = answers[q.id];
-              return (
-                <div
-                  key={q.id}
-                  className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-                >
-                  <div>
-                    <span className="text-[10px] font-extrabold uppercase text-sora-600">
-                      Soal #{q.urutan} • {q.aspek}
-                    </span>
-                    <p className="text-xs font-bold text-slate-800">{q.teks}</p>
-                  </div>
-                  <span className="px-3 py-1 rounded-xl bg-white border border-sora-200 text-xs font-extrabold text-sora-700 shrink-0">
-                    {val !== undefined && val !== ""
-                      ? String(val)
-                      : "Belum diisi"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => setConfirmScreen(false)}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Kembali Ubah Jawaban
-            </button>
-
-            <button
-              type="button"
-              onClick={handleFinalSubmit}
-              className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-sora-500 to-sakura-500 text-white text-xs sm:text-sm font-extrabold shadow-lg hover:opacity-95 transition"
-            >
-              <Send className="w-4 h-4" />
-              Kirim & Analisis dengan Sensei-AI ✨
-            </button>
-          </div>
+      {successMsg && (
+        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm font-medium flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{successMsg}</span>
         </div>
-      ) : (
-        /* Daftar Pertanyaan pada Aspek Aktif */
+      )}
+
+      {/* Daftar Pertanyaan pada Aspek Aktif */}
+      {currentGroup && (
         <div className="space-y-4">
-          {aspectGroups[stepIdx]?.items.map((q) => {
-            const currentVal = answers[q.id];
-            let opsiList: string[] = [];
+          {currentGroup.items.map((q) => {
+            const entry = answers[q.id] || { nilai: "", catatan: "", buktiUrl: "" };
+            let opsi: string[] = [];
             try {
-              opsiList = JSON.parse(q.opsiJSON || "[]");
+              opsi = JSON.parse(q.opsiJSON || "[]");
             } catch {
-              opsiList = [];
+              opsi = [];
             }
+
+            const showNotes = Boolean(expandedNotes[q.id]);
 
             return (
               <div
                 key={q.id}
-                className="bg-white rounded-3xl border border-sora-200/80 p-5 sm:p-6 shadow-card space-y-3"
+                className="rounded-2xl bg-white border border-slate-200 p-5 shadow-xs space-y-4"
               >
-                <div className="flex items-center justify-between text-xs font-bold text-sora-600">
-                  <span>
-                    Pertanyaan #{q.urutan} • Aspek {q.aspek}
-                  </span>
-                  <span className="text-slate-400">Bobot {q.bobot}x</span>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">
+                      Indikator #{q.urutan} • {q.aspek}{" "}
+                      {q.wajib ? "• Wajib" : "• Opsional"}
+                    </span>
+                    <h3 className="font-semibold text-sm sm:text-base text-slate-900 mt-1 leading-snug">
+                      {q.teks}
+                    </h3>
+                  </div>
                 </div>
 
-                <p className="font-display font-bold text-slate-900 text-sm sm:text-base leading-relaxed">
-                  {q.teks}
-                  {q.wajib && (
-                    <span className="text-rose-500 ml-1" title="Wajib diisi">
-                      *
-                    </span>
-                  )}
-                </p>
-
-                {/* Input sesuai Tipe Pertanyaan (PRD Bagian 5.3 & 6.2) */}
+                {/* Input sesuai Tipe Pertanyaan */}
                 {q.tipe === "skala" && (
-                  <div className="grid grid-cols-5 gap-2 pt-1">
-                    {[1, 2, 3, 4, 5].map((num) => {
-                      const active = Number(currentVal) === num;
-                      const labelText =
-                        opsiList[num - 1] ||
-                        ["Kurang", "Cukup", "Baik", "Sangat Baik", "Istimewa"][
-                          num - 1
-                        ];
-                      return (
-                        <button
-                          key={num}
-                          type="button"
-                          onClick={() => handleAnswerChange(q.id, num)}
-                          className={`p-3 rounded-2xl border text-center transition flex flex-col items-center justify-center gap-1 ${
-                            active
-                              ? "bg-gradient-to-br from-sora-500 to-sakura-500 border-sora-500 text-white shadow-md scale-[1.02]"
-                              : "bg-slate-50/80 border-slate-200 text-slate-700 hover:bg-sora-50"
-                          }`}
-                        >
-                          <span className="font-display font-extrabold text-lg">
-                            {num}
-                          </span>
-                          <span
-                            className={`text-[10px] line-clamp-1 font-semibold ${
-                              active ? "text-white" : "text-slate-400"
+                  <div className="space-y-2.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      {(opsi.length > 0
+                        ? opsi
+                        : [
+                            "1 - Kurang",
+                            "2 - Cukup",
+                            "3 - Baik",
+                            "4 - Amat Baik",
+                          ]
+                      ).map((label, idx) => {
+                        const scoreVal = String(idx + 1);
+                        const selected = entry.nilai === scoreVal;
+                        const shortTitle = label.split(":")[0] || `Skala ${scoreVal}`;
+                        const desc = label.includes(":")
+                          ? label.split(":").slice(1).join(":").trim()
+                          : "";
+                        return (
+                          <button
+                            key={scoreVal}
+                            type="button"
+                            disabled={isLocked}
+                            onClick={() =>
+                              updateAnswerField(q.id, { nilai: scoreVal })
+                            }
+                            className={`p-3 rounded-xl border text-left transition ${
+                              selected
+                                ? "bg-blue-600 border-blue-600 text-white shadow-xs"
+                                : "bg-slate-50 border-slate-200 hover:border-blue-300 text-slate-800"
                             }`}
                           >
-                            {labelText.replace(/^\d\s*-\s*/, "")}
-                          </span>
-                        </button>
-                      );
-                    })}
+                            <div className="font-display font-bold text-xs sm:text-sm">
+                              {shortTitle}
+                            </div>
+                            {desc && (
+                              <div
+                                className={`text-[11px] mt-1 leading-snug ${
+                                  selected ? "text-blue-100" : "text-slate-500"
+                                }`}
+                              >
+                                {desc}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
                 {q.tipe === "ya_tidak" && (
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    {["Ya", "Tidak"].map((opt) => {
-                      const active = String(currentVal) === opt;
-                      return (
-                        <button
-                          key={opt}
-                          type="button"
-                          onClick={() => handleAnswerChange(q.id, opt)}
-                          className={`py-3 px-4 rounded-2xl border font-bold text-sm transition flex items-center justify-center gap-2 ${
-                            active
-                              ? "bg-sora-500 border-sora-500 text-white shadow-sm"
-                              : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-sora-50"
-                          }`}
-                        >
-                          {active && <CheckCircle2 className="w-4 h-4" />}
-                          {opt}
-                        </button>
-                      );
-                    })}
+                  <div className="flex gap-3">
+                    {["Ya, Terlaksana", "Tidak Terlaksana"].map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        disabled={isLocked}
+                        onClick={() => updateAnswerField(q.id, { nilai: opt })}
+                        className={`px-4 py-2.5 rounded-xl border text-xs font-bold transition ${
+                          entry.nilai === opt
+                            ? "bg-blue-600 border-blue-600 text-white"
+                            : "bg-slate-50 border-slate-200 text-slate-700"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
                   </div>
                 )}
 
                 {q.tipe === "pilihan_ganda" && (
-                  <div className="space-y-2 pt-1">
-                    {opsiList.map((opt, idx) => {
-                      const active = String(currentVal) === opt;
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => handleAnswerChange(q.id, opt)}
-                          className={`w-full text-left p-3.5 rounded-2xl border text-xs sm:text-sm font-semibold transition flex items-center justify-between gap-3 ${
-                            active
-                              ? "bg-sora-50 border-sora-400 text-sora-900 shadow-xs"
-                              : "bg-slate-50/70 border-slate-200 text-slate-700 hover:bg-white"
-                          }`}
-                        >
-                          <span>{opt}</span>
-                          {active && (
-                            <CheckCircle2 className="w-4 h-4 text-sora-600 shrink-0" />
-                          )}
-                        </button>
-                      );
-                    })}
+                  <div className="space-y-2">
+                    {opsi.map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        disabled={isLocked}
+                        onClick={() => updateAnswerField(q.id, { nilai: opt })}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl border text-xs sm:text-sm font-medium transition ${
+                          entry.nilai === opt
+                            ? "bg-blue-600 border-blue-600 text-white"
+                            : "bg-slate-50 border-slate-200 text-slate-700"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
                   </div>
                 )}
 
-                {q.tipe === "isian_singkat" && (
-                  <input
-                    type="text"
-                    value={String(currentVal || "")}
-                    onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                    placeholder="Ketik jawaban singkat Anda..."
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/60 focus:bg-white text-sm"
+                {(q.tipe === "isian_singkat" || q.tipe === "esai") && (
+                  <textarea
+                    rows={q.tipe === "esai" ? 4 : 2}
+                    disabled={isLocked}
+                    value={entry.nilai}
+                    onChange={(e) =>
+                      updateAnswerField(q.id, { nilai: e.target.value })
+                    }
+                    placeholder="Tuliskan deskripsi keterlaksanaan dan refleksi objektif Anda..."
+                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 )}
 
-                {q.tipe === "esai" && (
-                  <textarea
-                    rows={4}
-                    value={String(currentVal || "")}
-                    onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                    placeholder="Tuliskan cerita refleksi dan rencana tindak lanjut Anda secara leluasa..."
-                    className="w-full p-4 rounded-2xl border border-slate-200 bg-slate-50/60 focus:bg-white text-sm leading-relaxed"
-                  />
-                )}
+                {/* Drawer Catatan Keterlaksanaan & Link Bukti */}
+                <div className="pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedNotes((prev) => ({
+                        ...prev,
+                        [q.id]: !prev[q.id],
+                      }))
+                    }
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 hover:underline"
+                  >
+                    {showNotes ? (
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                    {showNotes
+                      ? "Tutup Catatan & Tautan Bukti"
+                      : "Tambah Catatan Refleksi & Tautan Bukti Pembelajaran"}
+                  </button>
+
+                  {showNotes && (
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Catatan Keterlaksanaan / Praktik Nyata
+                        </label>
+                        <textarea
+                          rows={2}
+                          disabled={isLocked}
+                          value={entry.catatan}
+                          onChange={(e) =>
+                            updateAnswerField(q.id, { catatan: e.target.value })
+                          }
+                          placeholder="Contoh: Menggunakan media simulasi PhET di kelas VIII-B..."
+                          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Tautan Bukti Pendukung (Drive / Foto / Video)
+                        </label>
+                        <input
+                          type="url"
+                          disabled={isLocked}
+                          value={entry.buktiUrl}
+                          onChange={(e) =>
+                            updateAnswerField(q.id, { buktiUrl: e.target.value })
+                          }
+                          placeholder="https://drive.google.com/..."
+                          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
-
-          {/* Tombol Navigasi Langkah */}
-          <div className="flex items-center justify-between pt-2">
-            <button
-              type="button"
-              disabled={stepIdx === 0}
-              onClick={() => {
-                setStepIdx((s) => Math.max(0, s - 1));
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className="inline-flex items-center gap-1.5 px-4 py-3 rounded-2xl bg-white border border-slate-200 text-xs font-bold text-slate-600 disabled:opacity-40"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Aspek Sebelumnya
-            </button>
-
-            <button
-              type="button"
-              onClick={handleNextStep}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-sora-500 to-sakura-500 text-white text-xs sm:text-sm font-bold shadow-md hover:opacity-95 transition"
-            >
-              {stepIdx < totalSteps - 1
-                ? "Lanjut ke Aspek Berikutnya"
-                : "Lanjut ke Konfirmasi Akhir"}
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
         </div>
       )}
+
+      {/* Footer Navigasi & Aksi Submit */}
+      <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={activeAspectIdx === 0}
+            onClick={() => setActiveAspectIdx((i) => Math.max(0, i - 1))}
+            className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 disabled:opacity-40 inline-flex items-center gap-1"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Aspek Sebelumnya
+          </button>
+          <button
+            type="button"
+            disabled={activeAspectIdx >= aspectGroups.length - 1}
+            onClick={() =>
+              setActiveAspectIdx((i) =>
+                Math.min(aspectGroups.length - 1, i + 1)
+              )
+            }
+            className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 disabled:opacity-40 inline-flex items-center gap-1"
+          >
+            Aspek Berikutnya
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={savingDraft || isLocked}
+            onClick={handleSaveDraftManual}
+            className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold inline-flex items-center gap-1.5"
+          >
+            <Save className="w-3.5 h-3.5" />
+            Simpan Draf
+          </button>
+
+          <button
+            type="button"
+            disabled={submittingMode !== null || isLocked}
+            onClick={handleSubmitVerifikasi}
+            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-60"
+          >
+            {submittingMode === "verifikasi" ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Send className="w-3.5 h-3.5" />
+            )}
+            Ajukan Verifikasi Kepala Sekolah
+          </button>
+
+          <button
+            type="button"
+            disabled={submittingMode !== null || isLocked}
+            onClick={handleSubmitWithAI}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm disabled:opacity-60"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Susun Draf AI & Ajukan Penilaian
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

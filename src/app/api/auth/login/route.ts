@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { checkRateLimit, COOKIE_NAME, signToken } from "@/lib/auth";
+import {
+  checkRateLimit,
+  COOKIE_NAME,
+  isSupervisorRole,
+  signToken,
+  UserRole,
+} from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed-data";
 import { logActivity } from "@/lib/settings";
 
@@ -62,24 +68,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (expectedRole && user.role !== expectedRole) {
-      if (expectedRole === "admin") {
-        return NextResponse.json(
-          {
-            error:
-              "Akses ditolak: Akun Guru tidak dapat masuk melalui Portal Admin. Silakan gunakan halaman Login Guru (/login).",
-          },
-          { status: 403 }
-        );
-      } else {
-        return NextResponse.json(
-          {
-            error:
-              "Akun ini adalah akun Admin. Silakan masuk melalui Portal Admin (/admin/login).",
-          },
-          { status: 403 }
-        );
-      }
+    const userIsSupervisor = isSupervisorRole(user.role);
+
+    if (expectedRole === "admin" && !userIsSupervisor) {
+      return NextResponse.json(
+        {
+          error:
+            "Akses ditolak: Akun Guru tidak dapat masuk melalui Portal Pimpinan/Supervisor. Silakan gunakan halaman Login Guru (/login).",
+        },
+        { status: 403 }
+      );
+    }
+    if (expectedRole === "guru" && userIsSupervisor) {
+      return NextResponse.json(
+        {
+          error:
+            "Akun ini adalah akun Kepala Sekolah / Pengawas / Admin. Silakan masuk melalui Portal Pimpinan (/admin/login).",
+        },
+        { status: 403 }
+      );
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
@@ -102,19 +109,26 @@ export async function POST(req: NextRequest) {
       data: { lastLoginAt: new Date() },
     });
 
+    const resolvedRole: UserRole =
+      user.role === "kepala_sekolah" ||
+      user.role === "pengawas" ||
+      user.role === "admin"
+        ? (user.role as UserRole)
+        : "guru";
+
     const token = await signToken({
       userId: user.id,
       email: user.email,
       nama: user.nama,
-      role: user.role === "admin" ? "admin" : "guru",
+      role: resolvedRole,
     });
 
     await logActivity({
       userId: user.id,
       namaUser: user.nama,
-      role: user.role,
+      role: resolvedRole,
       aksi: "LOGIN_BERHASIL",
-      detail: `${user.nama} (${user.role}) berhasil masuk ke sistem`,
+      detail: `${user.nama} (${resolvedRole}) berhasil masuk ke sistem`,
     });
 
     const res = NextResponse.json({
@@ -123,9 +137,10 @@ export async function POST(req: NextRequest) {
         id: user.id,
         nama: user.nama,
         email: user.email,
-        role: user.role,
+        role: resolvedRole,
+        jabatan: user.jabatan,
       },
-      redirectTo: user.role === "admin" ? "/admin" : "/guru",
+      redirectTo: userIsSupervisor ? "/admin" : "/guru",
     });
 
     res.cookies.set(COOKIE_NAME, token, {

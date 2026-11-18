@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import {
   ShieldAlert,
   Cpu,
-  Headphones,
+  CheckCircle2,
   DollarSign,
   AlertTriangle,
   Search,
@@ -106,17 +106,17 @@ export default function AdminLogKeamananPage() {
         <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-card flex items-center justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Karakter TTS Fish Audio
+              Laporan Supervisi Terbit
             </p>
             <p className="font-display font-extrabold text-2xl text-slate-900 mt-1">
-              {usage.totalKarakterTTS.toLocaleString("id-ID")}
+              {usage.totalEvaluasiAI}
             </p>
-            <span className="text-xs text-sakura-600 font-semibold">
-              {usage.totalPodcast} audio ({Math.round(usage.totalDurasiDetik / 60)} mnt)
+            <span className="text-xs text-emerald-700 font-semibold">
+              AI Co-Evaluator & Manual Kepsek
             </span>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-sakura-100 text-sakura-600 flex items-center justify-center">
-            <Headphones className="w-6 h-6" />
+          <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center">
+            <CheckCircle2 className="w-6 h-6" />
           </div>
         </div>
 
@@ -145,7 +145,7 @@ export default function AdminLogKeamananPage() {
               </span>
             ) : (
               <span className="text-xs text-emerald-600 font-semibold block">
-                Mode Standar (AI + TTS Cache)
+                Mode Standar (AI Co-Evaluator)
               </span>
             )}
           </div>
@@ -163,7 +163,7 @@ export default function AdminLogKeamananPage() {
               {usage.failedLogsCount}
             </p>
             <span className="text-xs text-slate-500 font-semibold">
-              Log panggilan AI/TTS/Login
+              Log panggilan AI / Login / Verifikasi
             </span>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center">
@@ -200,6 +200,8 @@ export default function AdminLogKeamananPage() {
               className="px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white font-semibold"
             >
               <option value="ALL">Semua Role</option>
+              <option value="kepala_sekolah">Kepala Sekolah</option>
+              <option value="pengawas">Pengawas Sekolah</option>
               <option value="admin">Admin</option>
               <option value="guru">Guru</option>
               <option value="system">System / Bot</option>
